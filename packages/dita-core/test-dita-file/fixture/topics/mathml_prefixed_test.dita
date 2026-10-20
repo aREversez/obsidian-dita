@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="mathml_prefixed_test" xml:lang="zh-CN">
+    <title>命名空间前缀 MathML 渲染测试</title>
+    <shortdesc>Oxygen 公式编辑器 / MathType 导出的 MathML 通常带 mml: 命名空间前缀，用于确认这种真实工具链产出的标签不会被渲染器当成未知标签而丢弃结构。</shortdesc>
+    <body>
+        <section id="section_sqrt">
+            <title>根号（带前缀）</title>
+            <p>下面这行公式应显示为带根号的排版：a 的平方加 b 的平方，整体开根号，
+                <mathml>
+                    <mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML">
+                        <mml:msqrt>
+                            <mml:mrow>
+                                <mml:msup><mml:mi>a</mml:mi><mml:mn>2</mml:mn></mml:msup>
+                                <mml:mo>+</mml:mo>
+                                <mml:msup><mml:mi>b</mml:mi><mml:mn>2</mml:mn></mml:msup>
+                            </mml:mrow>
+                        </mml:msqrt>
+                    </mml:math>
+                </mathml>
+                而不是压扁成没有根号、没有上标的 "a 2 + b 2"。</p>
+        </section>
+        <section id="section_checklist">
+            <title>验证要点</title>
+            <ul>
+                <li>应看到真正的根号符号包住整个 a²+b²，且 2 是上标，不是普通数字</li>
+                <li>如果看到的是一行纯文字 "a 2 + b 2"（没有根号、没有上标），说明命名空间前缀又被当成未知标签丢弃了</li>
+            </ul>
+        </section>
+    </body>
+</topic>

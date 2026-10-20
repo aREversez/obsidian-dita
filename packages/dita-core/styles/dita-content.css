@@ -1,0 +1,912 @@
+/*
+ * dita-core: host-neutral stylesheet for rendered DITA content.
+ *
+ * Derived from the VS Code DITA Viewer's media/styles.css (lines 14-905, the
+ * topic-content rules; the map/book/site chrome stays with the VS Code host).
+ * Differences from that file, and nothing else:
+ *   - every --vscode-* reference became a --dita-* host token (see TOKENS.md),
+ *     so the sheet no longer knows which application is hosting it;
+ *   - :root / .vscode-dark selectors also match a Shadow DOM host
+ *     (:host / :host([data-scheme="dark"]));
+ *   - `body` rules became `.dita-body`, `html.dv-conref-hot` became
+ *     `:host(.dv-conref-hot)`;
+ *   - the two #c0392b literals in .hazardstatement now use
+ *     --color-danger-border (identical value by default).
+ * A host supplies colours, fonts and sizes by defining the --dita-* tokens
+ * (and may override the --color-* palette); it never edits this file.
+ */
+@layer dv-base, wh-compat;
+@layer dv-base {
+:host, :root {
+  --body-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --code-font: 'SF Mono', Monaco, 'Cascadia Code', 'Consolas', monospace;
+  --line-height: 1.6;
+  --max-width: 900px;
+  --color-border: #ddd;
+  --table-border: #999;
+  --color-note-bg: #f0f7ff;
+  --color-warning-bg: #fffbf0;
+  --color-danger-bg: #fef2f2;
+  --color-important-bg: #f8f4ff;
+  --color-tip-bg: #f0fdf4;
+  --color-note-border: #4a90d9;
+  --color-warning-border: #e6a23c;
+  --color-danger-border: #c0392b;
+  --color-important-border: #8e44ad;
+  --color-tip-border: #27ae60;
+  /* Bound directly to VS Code's own live theme variable (falls back to a
+     light gray if it's ever unavailable) so this always tracks the real,
+     current theme instead of relying on a manually-computed .vscode-dark
+     class that can go stale relative to the actual active theme. */
+  --color-code-bg: var(--dita-code-bg, #f8f8f8);
+  --color-link: #2b6cb0;
+  --color-code-lang-bg: var(--dita-code-inline-bg, #e8e8e8);
+  --color-profiling-bg: #eaf7c9;
+  --color-profiling-border: #b8d878;
+  --color-profiling-label-bg: #8fb84e;
+  --color-profiling-label-text: #2a3a12;
+  --color-indexterm-chip-bg: #e6f0fa;
+  --color-indexterm-chip-text: #2c5282;
+  --color-menucascade-arrow: #767676;
+}
+
+.vscode-dark, :host([data-scheme="dark"]) {
+  --color-border: #555;
+  --table-border: #777;
+  --color-note-bg: #1a2633;
+  --color-warning-bg: #33281a;
+  --color-danger-bg: #331a1a;
+  --color-important-bg: #261a33;
+  --color-tip-bg: #1a3326;
+  --color-link: #6ab0f3;
+  --color-code-bg: var(--dita-code-bg, #555);
+  --color-code-lang-bg: var(--dita-code-inline-bg, #666);
+  --color-profiling-bg: #3a4a1f;
+  --color-profiling-border: #5a7530;
+  --color-profiling-label-bg: #6b8f39;
+  --color-profiling-label-text: #eef7dc;
+  --color-indexterm-chip-bg: #1f2f42;
+  --color-indexterm-chip-text: #9dc4ea;
+  --color-menucascade-arrow: #aaaaaa;
+}
+
+.dita-body {
+  font-family: var(--body-font);
+  font-size: 1em;
+  line-height: var(--line-height);
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  color: var(--dita-fg);
+}
+
+/* Every source edit swaps this div's entire innerHTML in one mutation
+   (see #dita-content-root's 'updateContent' message handler, shared by
+   DitaViewerProvider.ts and MapViewerProvider.ts) -- not a small, targeted
+   change the browser's default CSS Scroll Anchoring is designed for (it
+   tries to auto-compensate scrollTop to keep whatever it picks as the
+   "anchor node" visually fixed when content changes near the viewport).
+   When virtually the entire subtree is replaced at once, the previous
+   anchor node is gone and whatever the browser picks as a replacement has
+   no reliable relationship to what was actually on screen, so its
+   compensation can shift scroll position in ways that don't correspond to
+   anything real -- consistent with the reported "typing edits far from
+   the current scroll position occasionally causes an unexplained extra
+   scroll shift" behavior. Turning it off here means scrollTop simply
+   stays exactly where it was as a fixed number across the swap, which is
+   what both providers' content-only update already assumes; the
+   extension's own explicit logic (applyHighlightLine, scrollToLine -- the
+   topic viewer only, map view has no scroll-sync of its own) is the only
+   thing that should ever intentionally move it. */
+#dita-content-root {
+  overflow-anchor: none;
+}
+
+/* In-place mode switch (toolbar-persistence work): added to the OLD content
+   root by the mode button's click handler the instant it fires, since its
+   own label flips immediately while the new stage is still being rendered
+   asynchronously on the host side (getModeToggleScript). Gives that gap a
+   visible "switching" state instead of the button and the page silently
+   disagreeing for a moment. Needs no matching removal -- applyModeStage
+   (MapViewerProvider.ts) discards this exact node once the new stage lands
+   and inserts a fresh, undimmed one in its place. */
+#dita-content-root.mode-switching {
+  opacity: 0.5;
+  transition: opacity 0.1s ease-out;
+  pointer-events: none;
+  /* Positioning context for .dita-mode-switch-overlay below -- scoped to
+     this class rather than added unconditionally so it never affects
+     #dita-content-root's normal (non-switching) layout. */
+  position: relative;
+}
+
+/* getModeToggleScript's delayed "still switching" overlay: only appended if
+   a switch takes longer than its 400ms grace period (see that script's own
+   comment for why), as a child of the OLD #dita-content-root, so it is
+   scoped to the content area alone -- the toolbar above it stays fully
+   visible and interactive throughout, which is the entire point of the
+   in-place-switch work this belongs to. .dita-loading-spinner is the same
+   spinner the full-reload path's book-mode placeholder uses
+   (MapViewerProvider.ts's generateLoadingHtml); here it is a small overlay
+   instead of a full-page one. */
+.dita-mode-switch-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--dita-fg-muted, #999);
+}
+
+/* Topic article */
+.topic > h1:first-child { margin-top: 0; }
+
+/* Short description */
+.shortdesc {
+  background: var(--color-note-bg);
+  color: var(--dita-fg-muted, var(--dita-fg));
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  font-size: 1.05em;
+  line-height: 1.6;
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+}
+
+h1 { font-size: 1.8em; border-bottom: 2px solid var(--color-border); padding-bottom: 0.3em; }
+h2 { font-size: 1.5em; }
+h3 { font-size: 1.3em; }
+h4 { font-size: 1.15em; }
+
+/* Paragraphs */
+p { margin: 0.75em 0; }
+
+/* Note boxes */
+.note {
+  border-left: 4px solid var(--color-note-border);
+  background: var(--color-note-bg);
+  color: var(--dita-fg);
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+  border-radius: 0 4px 4px 0;
+}
+
+.note__label { font-weight: 600; text-transform: capitalize; }
+/* The note text sits in .note__body for the benefit of WebHelp-style css. In
+   the own shell it stays inline, so the label and the text share a line as
+   they always did (a block here pushes the text onto its own line). */
+.dita-body:not(.wh_topic_page) .note__body { display: inline; }
+.note--warning { border-left-color: var(--color-warning-border); background: var(--color-warning-bg); }
+.note--danger { border-left-color: var(--color-danger-border); background: var(--color-danger-bg); }
+.note--important { border-left-color: var(--color-important-border); background: var(--color-important-bg); }
+.note--tip { border-left-color: var(--color-tip-border); background: var(--color-tip-bg); }
+
+/* Conref'd content: anything pulled in by conref / conkeyref / conrefend.
+   Oxygen's Author mode paints it with a gray background and puts a jump
+   button in the top-left corner; a flat opaque gray fights VS Code's themes
+   (and the note/section tints underneath), so this is a translucent neutral
+   that composes with whatever is behind it, plus a thin leading bar that
+   stays visible on dark themes where a faint tint nearly vanishes.
+   All of it is drawn as background layers on the element itself -- no
+   ::before/::after (profiling already owns those on li/ul/ol and the
+   non-inline elements) and no wrapper element. The renderer only emits
+   data-conref when the preview opts in, so "Export as HTML" and the diff
+   view never carry it. The jump icon is a background too, so it has no DOM
+   of its own: the click zone is recomputed from the SAME custom properties
+   below in conrefJumpScript.ts (getComputedStyle().getPropertyValue())
+   -- the vars are the single source of truth, do not re-hardcode the
+   numbers on either side. Padding on the block/inline variants gives the
+   tint some air on both sides (so it reads as a chunk around the content
+   rather than a tight underline) and keeps the leading bar (flush with
+   the inner-border edge) clear of the first glyph. */
+:host, :root {
+  --color-conref-bg: rgba(128, 128, 128, 0.13);
+  --color-conref-bar: rgba(128, 128, 128, 0.55);
+  /* Oxygen paints the reuse badge as a few OPEN horizontal strokes (lines of
+     text), not a filled/closed page rectangle -- strokes read as airy chrome on
+     the translucent tint, whereas a solid glyph competes with content and, on
+     dark themes, a white fill glowed. Three lines (not four) keep it lighter;
+     the last runs a touch longer and gets a small right arrowhead so the same
+     gesture means "jump to source". Light-mode grays below; .vscode-dark
+     (after this block) lifts them so the strokes stay legible on dark. */
+  --conref-jump-icon: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Cg%20fill='none'%20stroke='%239c9c9c'%20stroke-width='1'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M2%204h7M2%208h7M2%2012h9'/%3E%3Cpath%20d='M9.5%2010.5l1.8%201.5-1.8%201.5'%20stroke='%23808080'/%3E%3C/g%3E%3C/svg%3E");
+  /* Geometry read by both the paint rules below and the webview hit-test
+     in conrefJumpScript.ts. Change here, both sides move together. */
+  --conref-bar-width: 3px;
+  --conref-icon-block-size: 16px;
+  --conref-icon-block-offset: 3px;
+  --conref-icon-cell-size: 15px;
+  --conref-icon-cell-offset: 2px;
+  --conref-icon-inline-size: 11px;
+  --conref-icon-inline-offset: 1px;
+  /* Inline slot: the padding-right reserved on the element so the icon
+     sits clear of the trailing glyph. Derives as
+     offset + size + 1px visual gap, but kept as a flat token so the
+     script's hit-test reads the exact same number. */
+  --conref-icon-inline-slot: 13px;
+}
+/* Dark-mode badge: same open-line glyph, lifted to light grays so the strokes
+   stay legible over a dark canvas without glowing. Must sit AFTER the :root
+   block -- .vscode-dark is on <html>, the same element :root targets, so it
+   wins on source order, not specificity. */
+.vscode-dark, :host([data-scheme="dark"]) {
+  --conref-jump-icon: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Cg%20fill='none'%20stroke='%238a8a8a'%20stroke-width='1'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M2%204h7M2%208h7M2%2012h9'/%3E%3Cpath%20d='M9.5%2010.5l1.8%201.5-1.8%201.5'%20stroke='%23a0a0a0'/%3E%3C/g%3E%3C/svg%3E");
+}
+[data-conref][data-conref] {
+  background-repeat: no-repeat;
+}
+[data-conref="block"][data-conref] {
+  /* top clears the icon (offset 3 + size 16 + a small gap, hardcoded to match
+     the tokens above); left/right symmetric so the leading bar sits at
+     the same distance from the first glyph as the right padding does
+     from the last; bottom gives the tint some air under the text. */
+  padding-top: 22px;
+  padding-right: 10px;
+  padding-bottom: 6px;
+  padding-left: 10px;
+  background-image:
+    var(--conref-jump-icon),
+    linear-gradient(var(--color-conref-bar), var(--color-conref-bar)),
+    linear-gradient(var(--color-conref-bg), var(--color-conref-bg));
+  background-position:
+    var(--conref-icon-block-offset) var(--conref-icon-block-offset),
+    left top,
+    0 0;
+  background-size:
+    var(--conref-icon-block-size) var(--conref-icon-block-size),
+    var(--conref-bar-width) 100%,
+    auto;
+}
+/* A list's indent IS its padding-left (ul, ol { padding-left: 1.5em }); the
+   longhand above would flatten it to 10px and push the markers out under the
+   bar. Keep the indent and add the same 10px of air on top. */
+ul[data-conref="block"][data-conref],
+ol[data-conref="block"][data-conref],
+.simple-list[data-conref="block"][data-conref] {
+  padding-left: calc(1.5em + 10px);
+}
+/* A whole <note> reused: the generic block padding would replace .note's own
+   0.75rem 1rem. Keep its horizontal padding (1rem already clears the 3px bar
+   and the icon) and bottom; only the top yields, to the icon line. */
+.note[data-conref="block"][data-conref] {
+  padding: 22px 1rem 0.75rem 1rem;
+}
+[data-conref="inline"][data-conref] {
+  /* left padding mirrors the block treatment on a smaller scale; slice
+     (the default box-decoration-break) means only the very first line of
+     a wrapped run gets the leading gap, which is what Oxygen shows too.
+     padding-right is the slot; the icon hugs the right edge inside it. */
+  padding: 0 var(--conref-icon-inline-slot) 0 3px;
+  border-radius: 2px;
+  background-image:
+    var(--conref-jump-icon),
+    linear-gradient(var(--color-conref-bg), var(--color-conref-bg));
+  background-position:
+    right var(--conref-icon-inline-offset) center,
+    0 0;
+  background-size:
+    var(--conref-icon-inline-size) var(--conref-icon-inline-size),
+    auto;
+}
+[data-conref="cell"][data-conref] {
+  /* Reserve a left gutter so the top-left badge never sits on the first
+     glyph -- a <td>'s default 0.75rem left padding is shorter than the
+     16px icon, which is why the cell badge was overlapping "Cell A".
+     Only padding-left is overridden; top/right/bottom keep the table's
+     own 0.5rem/0.75rem so rows stay the same height and text tops stay
+     aligned with non-reused sibling cells. */
+  padding-left: calc(var(--conref-icon-cell-offset) + var(--conref-icon-cell-size) + 2px);
+  background-image:
+    var(--conref-jump-icon),
+    linear-gradient(var(--color-conref-bg), var(--color-conref-bg));
+  background-position:
+    var(--conref-icon-cell-offset) var(--conref-icon-cell-offset),
+    0 0;
+  background-size:
+    var(--conref-icon-cell-size) var(--conref-icon-cell-size),
+    auto;
+}
+/* Set by the hover hit-test in conrefJumpScript.ts while the pointer is over
+   the icon (a background cannot take its own cursor). */
+:host(.dv-conref-hot) [data-conref],
+:host(.dv-conref-hot) [data-conref] * {
+  cursor: pointer;
+}
+/* Keyboard / screen-reader focus for the jump badge (see conrefJumpScript.ts:
+   renderer.ts makes every mark focusable). The badge is a background, so the
+   ring is drawn on the element that carries it. :focus-visible, not :focus, so
+   a pointer click that lands on the element doesn't ring it -- matching the
+   site-nav treatment. Negative offset keeps the ring inside the tint box so it
+   never spills onto a neighbouring block. */
+[data-conref][data-conref]:focus-visible {
+  outline: 2px solid var(--dita-focus, #007fd4);
+  outline-offset: -2px;
+}
+/* The single hidden node every reused element's aria-describedby points at
+   (injected by conrefJumpScript.ts). It must be gone from the layout yet still
+   present in the accessibility tree, so it is clipped rather than display:none
+   -- display:none would remove the description screen readers announce on
+   focus, defeating the whole affordance. */
+.dv-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Profiling / conditional-processing attribute highlighting (props,
+   otherprops, audience, platform, product, base, importance, rev, status).
+   Mirrors Oxygen's default "show profiling" style: a tinted box around the
+   profiled content with a small label naming the attribute/value that
+   matched, rather than hiding anything. Toggled off via body.hide-profiling
+   (see the toolbar button in DitaViewerProvider.ts) -- pure CSS, no
+   re-render needed. */
+.profiled {
+  /* .profiled applies directly to the real element (see injectBlockProfiling
+     in renderer.ts), not a synthetic wrapper -- so we must NOT use border or
+     padding on the left side: border takes box-model space shifting content
+     and nested list markers, and any decoration on <li>/<ul>/<ol> visually
+     interferes with the browser's list-marker positioning. box-shadow paints
+     outward from the border-box edge without affecting layout, so the green
+     highlight ring never pushes content or covers nested bullets/numbers.
+     This box-shadow default is kept only for <li>/<ul>/<ol> (see the
+     override right below, which switches everything else to a real
+     border). */
+  box-shadow: 0 0 0 1.5px var(--color-profiling-border);
+  border-radius: 3px;
+  background: none;
+  padding: 0.4rem 0.6rem;
+  margin: 0.5rem 0;
+}
+/* Every OTHER block-level profiled element (section, div, p, dl, note,
+   ...) draws its highlight with a real border instead of the box-shadow
+   above. Reported symptom: two independently-profiled block elements
+   stacked directly next to each other (e.g. two sibling <section>s, each
+   with its own profiling attribute) rendering with their left/right sides
+   looking "not closed". box-shadow is purely a paint effect layered
+   outside the border-box -- it has no guaranteed closed-rectangle
+   semantics of its own the way an actual border does, and at a boundary
+   where two elements' painted regions sit close together (their margins
+   collapsed to the usual gap above), a thin 1.5px ring is exactly the
+   kind of decoration where that can go visibly wrong. A real border
+   doesn't share that ambiguity: border-left/right/top/bottom are each
+   unconditionally part of the element's own box, drawn every time,
+   regardless of what's rendered nearby. This is safe everywhere except
+   <li>/<ul>/<ol> -- border-radius/border don't affect list-marker
+   positioning on any other element, and for a block element with the
+   default width: auto, adding a border doesn't change its outer width
+   either (the browser narrows the content area to compensate, same as it
+   already does for padding). */
+.profiled:not(li):not(ul):not(ol):not(tr):not(.profiled--inline) {
+  box-shadow: none;
+  border: 1.5px solid var(--color-profiling-border);
+}
+/* <li>/<ul>/<ol> can't take the same real-border treatment above -- border
+   is real box-model space, and shifting an <li>'s own border-box shifts
+   where the browser hangs its list-marker, per the comment on .profiled
+   itself. box-shadow (and, tried next, outline) turned out not to be
+   reliable substitutes: both are paint-only effects layered outside the
+   border-box, and reported symptoms kept recurring on <li> specifically
+   whenever it had a block-level child like <p> inside it (plain
+   text-only <li>s were fine) -- e.g. box-shadow's the exact thing that
+   was going wrong for section before switching it to border, and outline
+   reproduced the identical "right side won't close" symptom for a
+   profiled <li> containing a <p>, plus introduced a new "crossing lines"
+   regression that plain border sidesteps.
+   Sidestepping the question of exactly which decoration property is safe
+   in this Chromium build for a list-item box with block children: draw
+   the ring with a real border, but on an absolutely-positioned ::before
+   pseudo-element instead of on the <li> itself. An absolutely-positioned
+   element is taken out of normal flow entirely, so it cannot move the
+   list-marker (nothing about the <li>'s own box model changed -- no new
+   border, no new padding, nothing the marker-positioning algorithm could
+   react to) while still being a literal border on a literal box, with
+   the same unambiguous every-side-drawn-every-time guarantee that fixed
+   section. It also can't fragment across the <li>'s own wrapped lines the
+   way an inline element's decoration can: this pseudo-element covers the
+   <li>'s box exactly once, top to bottom, regardless of how many lines
+   its content wraps to internally -- which is what rules out the
+   crossing-lines regression outline introduced. */
+.profiled:is(li, ul, ol) {
+  position: relative;
+  box-shadow: none;
+}
+.profiled:is(li, ul, ol)::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  border: 1.5px solid var(--color-profiling-border);
+  border-radius: 3px;
+  pointer-events: none;
+}
+.profiled--inline {
+  display: inline;
+
+  padding: 0 0.2rem;
+  margin: 0;
+  border-radius: 2px;
+  /* Deliberately NOT setting a custom line-height or box-decoration-break
+     here (both were tried and reverted). box-decoration-break: clone
+     closed the box on both sides at a line wrap, but the reference tool
+     this preview is meant to match (Oxygen) leaves it open on purpose --
+     previous line's trailing edge unclosed, next line's leading edge
+     unclosed -- which is just the CSS default (slice) already gives us
+     for free. And the extra line-height added to keep clone's padding
+     from bleeding into neighbouring lines pushed up *every* line this
+     element touches, including plain single-line usage, making profiled
+     phrases visibly taller/inconsistent with surrounding text -- worse
+     than the problem it was solving. Staying with the plain defaults here
+     keeps single-line height consistent everywhere and matches Oxygen's
+     open-sided wrap look. */
+}
+.profiled--inline .profiling-label {
+  float: none;
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.3em;
+  vertical-align: middle;
+}
+/* No special containment here for the trailing .profiling-chip (unlike
+   .profiled block-level handling below): earlier attempts to reserve
+   vertical room via padding+line-height, or to shrink the chip itself to
+   fit, both traded one visible problem for another (crossing borders on
+   wrapped lines, or a chip that looks flatter/smaller than every other
+   .profiling-chip elsewhere). Left at CSS defaults, matching Oxygen's own
+   rendering and keeping height consistent whether or not this element
+   happens to wrap. */
+/* Clearfix: .profiling-label below is `float: right` so it can share the
+   last line with short content (see the comment on .profiling-label) --
+   but a float is intentionally excluded from its containing block's own
+   height calculation unless that container is cleared or establishes a
+   new block formatting context, and .profiled does neither on its own.
+   When the label doesn't fit on the same line as the preceding text (long
+   or wrapping content) it drops to a line of its own below -- and without
+   this rule, .profiled's box-shadow border is sized from the non-floated
+   text alone, so it closes *before* that dropped line: the label then
+   visually sits outside/below its own green box, and can bleed into the
+   top margin of the very next .profiled sibling, breaking what should be
+   two clean, separate borders. The classic content:""; display:table;
+   clear:both idiom forces an (invisible) trailing box that clears the
+   float, so .profiled's own height -- and therefore its border -- always
+   extends down to actually contain the label. Scoped away from
+   .profiled--inline (label is float:none there, nothing to clear) and
+   away from tr.profiled (a <tr> doesn't render ::after reliably, and its
+   own label lives inside a <td> which already establishes its own block
+   formatting context and needs no help containing floats).
+*/
+.profiled:not(.profiled--inline):not(tr)::after {
+  content: '';
+  display: table;
+  clear: both;
+}
+/* float rather than a dedicated bottom-padding + position:absolute slot:
+   the box no longer has to reserve a fixed amount of vertical space for
+   the label regardless of how little content actually needs it (a
+   single-line profiled step/bullet used to look disproportionately tall,
+   with a big empty gap between the text and the label sitting below it).
+   Floating right lets the label sit on the *same* line as short content
+   for free, while still correctly dropping to its own line -- and staying
+   right-aligned there, matching Oxygen's convention and the ditamap tree
+   view's own box (see mapTypeMap.ts) -- whenever the preceding content is
+   itself block-level (a nested list, a wrapped multi-line paragraph) and
+   doesn't leave room on the same line. .profiled--inline above overrides
+   this back to float:none, since a label attached to an inline phrase
+   (ph/b/i/xref/...) needs to sit immediately next to that phrase
+   mid-sentence, not escape to the edge of the whole paragraph. */
+.profiling-label {
+  float: right;
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  margin-left: 0.5em;
+}
+.profiling-chip {
+  background: var(--color-profiling-label-bg);
+  color: var(--color-profiling-label-text);
+  font-size: 0.7em;
+  font-weight: 600;
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.profiling-chip__value { font-weight: 400; }
+/* Index term chips: small inline markers showing an authored <indexterm>'s
+   term path right where it appears in the running text -- not a compiled,
+   sorted back-of-book index (see the comment on topic/indexterm's renderer
+   in baseTypeMap.ts for why: sorting only makes sense for scripts with a
+   stable alphabetic/stroke order, so a generated index page would be
+   meaningless for e.g. Chinese content). Deliberately understated (smaller,
+   lower-contrast than profiling-chip) since these appear far more densely
+   in typical content than profiling markers do, and shouldn't compete with
+   the actual text for attention. */
+.indexterm-chip {
+  display: inline-block;
+  background: var(--color-indexterm-chip-bg);
+  color: var(--color-indexterm-chip-text);
+  font-size: 0.72em;
+  padding: 0.02rem 0.35rem;
+  border-radius: 3px;
+  white-space: nowrap;
+  margin: 0 0.15em;
+  cursor: default;
+}
+.indexterm-chip--ref { font-style: italic; }
+.indexterm-chip__see { font-style: italic; opacity: 0.85; }
+.dita-body.hide-profiling .profiled {
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+}
+/* The general reset above zeroes padding on every side, including left --
+   correct for everything else profiling touches, but a profiled ul/ol
+   relies on that left padding for its own children's marker gutter (see
+   ul.profiled/ol.profiled above), not just for the now-hidden box. Without
+   restoring it here, turning Flags off would silently break nested-list
+   indentation for exactly the same reason it broke with the box visible,
+   just conditionally instead of always. */
+.dita-body.hide-profiling ul.profiled,
+.dita-body.hide-profiling ol.profiled {
+  padding-left: 1.5em;
+}
+.dita-body.hide-profiling .profiled--inline { display: inline; }
+.dita-body.hide-profiling .profiling-label { display: none; }
+
+/* Phase 2 (the filter panel): actually hides content, unlike the toggle
+   above which only hides the highlight decoration. !important because
+   this needs to override whatever display value .profiled/.profiled--inline
+   set, and nothing else in this stylesheet should ever legitimately want
+   to re-show something the person explicitly filtered out. */
+.profile-filtered-out { display: none !important; }
+
+/* Lists */
+ul, ol { padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+/* Profiling on list elements: box-shadow doesn't affect layout, but the
+   generic .profiled padding still overrides the base padding-left both
+   rules above rely on. li's own padding-left is normally 0 (a plain li's
+   marker-gutter comes entirely from its *parent* ul/ol's padding, not
+   from the li itself) -- .profiled's shorthand would otherwise add
+   0.6rem there, shifting a profiled li's text right of its plain
+   siblings, so it's zeroed back out. ul/ol are the opposite case: their
+   own padding-left of 1.5em IS the marker gutter their own <li> children
+   need, so when the ul/ol itself is profiled, that 1.5em has to be
+   restored (not just zeroed) or its children's markers lose their
+   reserved space entirely and the whole nested list stops looking nested
+   at all. The top/bottom padding is kept so the box-shadow ring has
+   breathing room above and below the content either way. */
+li.profiled { padding-left: 0; }
+ul.profiled, ol.profiled { padding-left: 1.5em; }
+.simple-list { list-style: none; padding-left: 1.5em; }
+
+/* Definition lists */
+dl { margin: 1em 0; }
+.dlentry { margin: 0.5em 0; }
+dt { font-weight: 600; margin-top: 0.5em; }
+dd { margin-left: 1.5em; }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.95em; border: 2px solid var(--table-border); }
+table th, table td { border: 1px solid var(--table-border); padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; overflow-wrap: break-word; }
+table th { background: var(--color-code-bg); color: var(--dita-fg); font-weight: 600; }
+
+/* Profiling on table rows: the generic .profiled treatment below (box-
+   shadow ring + padding + margin) is built for ordinary block content and
+   doesn't fit a <tr> living inside this table's border-collapse: collapse
+   model. box-shadow paints independently of the collapsed border grid, so
+   a ring drawn straight on a row can drift out of alignment with the
+   row's actual cell edges (the "green block is offset" symptom), and two
+   separately-profiled adjacent rows each painting their own independent
+   ring don't share one continuous edge the way collapsed borders do,
+   leaving a visible gap/seam between them (the "border between rows is
+   incomplete" symptom). Coloring each cell's own border instead works
+   *with* border-collapse: a shared edge between two profiled rows merges
+   down to a single line, same as any other collapsed border, so
+   consecutive profiled rows read as one unbroken green outline. */
+tr.profiled {
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+  background: none;
+}
+tr.profiled > td,
+tr.profiled > th {
+  border-color: var(--color-profiling-border);
+}
+.dita-body.hide-profiling tr.profiled > td,
+.dita-body.hide-profiling tr.profiled > th {
+  border-color: var(--table-border);
+}
+
+/* CALS tables whose <colgroup> carries real colwidth hints (see
+   baseTypeMap.ts's 'topic/table' renderer): with the default 'auto' table
+   layout those widths are only a hint, and a column with a long unbroken
+   run of CJK text (or any content wider than the column's proportional
+   share) can force the browser to redistribute space away from a
+   short-content column regardless of what colwidth says -- symptom: a
+   narrow first column with a couple characters ends up wide, and a long
+   multi-paragraph second column ends up squeezed. 'fixed' makes colgroup
+   widths authoritative and independent of content. overflow-wrap above
+   keeps long unbroken content from overflowing its now content-independent
+   column. */
+.cals-table--fixed-layout { table-layout: fixed; }
+
+/* Simpletables are meant to be lighter-weight than CALS tables */
+.simple-table th, .simple-table td { padding: 0.4rem 0.6rem; }
+.simple-table th { background: transparent; border-bottom-width: 2px; }
+
+/* Foreign content (MathML, embedded SVG) — DITA doesn't signal whether a
+   <mathml>/<foreign> block is meant inline or as its own line the way
+   <image>'s @placement does, so this stays in normal inline flow by
+   default; a small margin just keeps it from crowding adjacent text. */
+.foreign-content { margin: 0 0.15em; }
+
+/* Images */
+/* --dita-scale is the only remaining size hint here, driven by the DITA
+   source's own @scale attribute -- it sizes the image relative to its OWN
+   natural pixel dimensions via 'zoom'. Per-image display sizing (separate
+   from @scale, and not tied to the DITA source at all) is applied at
+   runtime as an inline width/max-width on the specific <img>, via the
+   per-image zoom controls injected by the webview script -- see
+   .dita-img-wrap / .dita-img-toolbar below. */
+img { max-width: 100%; height: auto; border-radius: 4px; vertical-align: middle; cursor: zoom-in; zoom: var(--dita-scale, 1); }
+.image-break { display: block; margin: 1rem 0; }
+img[data-load-error] { cursor: default; }
+
+/* Per-image zoom/maximize toolbar: a small overlay pinned to the image's
+   own top-right corner, shown on hover (or keyboard focus-within, for
+   accessibility) rather than a page-wide toolbar, since the control now
+   only ever affects the one image it's attached to. Wrapper is an inline
+   <span>, not a <div>, so it stays validly nestable inside inline DITA
+   contexts like <p> without forcing a block break. */
+.dita-img-wrap { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
+.dita-img-toolbar {
+  position: absolute; top: 4px; right: 4px; z-index: 10;
+  display: flex; gap: 2px;
+  opacity: 0; pointer-events: none; transition: opacity 0.15s;
+}
+.dita-img-wrap:hover .dita-img-toolbar,
+.dita-img-wrap:focus-within .dita-img-toolbar {
+  opacity: 1; pointer-events: auto;
+}
+.dita-img-btn {
+  padding: 1px 5px; border-radius: 3px; line-height: 1.5; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--dita-border, #555);
+  background: var(--dita-bg, rgba(30, 30, 30, 0.85));
+  color: var(--dita-fg, #eee);
+}
+.dita-img-btn:hover { opacity: 0.85; }
+
+/* Custom right-click "Copy Image" menu (see contextmenu handling in the
+   webview script) -- styled to read as a native-ish context menu using
+   VS Code's own menu theme tokens, since a real OS context menu isn't
+   available consistently across every host this extension runs in. */
+.dita-img-ctxmenu {
+  position: fixed; z-index: 100000;
+  background: var(--dita-bg-elevated, var(--dita-bg, #1e1e1e));
+  border: 1px solid var(--dita-border, #454545);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  padding: 2px;
+  min-width: 140px;
+}
+.dita-img-ctxmenu-item {
+  display: block; width: 100%; text-align: left;
+  padding: 4px 10px; border: none; border-radius: 3px;
+  font-size: 13px; cursor: pointer;
+  background: transparent;
+  color: var(--dita-fg, #ccc);
+}
+.dita-img-ctxmenu-item:hover,
+.dita-img-ctxmenu-item:focus {
+  background: var(--dita-hover-bg, #2a2d2e);
+  color: var(--dita-selected-fg, var(--dita-fg, #ccc));
+  outline: none;
+}
+.dita-img-ctxmenu-item:disabled { cursor: default; opacity: 0.7; }
+/* Group divider for the sidebar's multi-item context menu (see
+   getSiteOpenSourceScript), matching how a native menu separates groups. */
+.dita-img-ctxmenu-sep {
+  height: 1px; margin: 2px 4px;
+  background: var(--dita-border, #454545);
+}
+
+/* Transient feedback pill for the lightbox's Ctrl+C copy path, which has
+   no menu item of its own to update the way the right-click menu does. */
+.dita-img-toast {
+  position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%);
+  z-index: 100001;
+  background: var(--dita-bg-elevated, var(--dita-bg, #1e1e1e));
+  border: 1px solid var(--dita-border, #454545);
+  color: var(--dita-fg, #ccc);
+  padding: 6px 14px; border-radius: 4px; font-size: 13px;
+  /* UI chrome, not document content: stays sans-serif regardless of the
+     reading-font toggle (Serif is a common choice there, and a serif toast
+     reads noticeably slower for a quick transient message). */
+  font-family: var(--dita-font, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  max-width: 92vw;
+  /* Kept to one line: a short toast that wraps to two is more disruptive
+     to read at a glance than one that's simply not padded to a fixed box
+     width. The message itself is kept short enough to fit in the common
+     case; text-overflow is only a safety net for an unusually long locale
+     string or width-option label. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+/* For feedback tied to a top-of-page control (the width dropdown): a
+   bottom toast is easy to miss entirely, or costs a big jump down to
+   notice, right after the user's focus and click just landed at the top. */
+.dita-img-toast--top { bottom: auto; top: 48px; }
+
+/* Figures */
+/* Left-aligned rather than centered: a fig's image should sit flush with
+   the surrounding body text's left edge (and, inside a list item, with the
+   li's text rather than its marker), matching how DITA authors read
+   figures in Oxygen. figure has no left/right margin of its own, so this
+   naturally follows whatever indent its containing block already has. */
+figure { margin: 1.5rem 0; text-align: left; }
+figcaption { font-style: italic; margin-top: 0.2rem; font-size: 0.95em; text-align: left; }
+
+/* Code blocks */
+pre.codeblock, pre.preformatted {
+  background: var(--color-code-bg);
+  color: var(--dita-fg);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 1rem;
+  overflow-x: auto;
+  font-family: var(--code-font);
+  font-size: 0.9em;
+  line-height: 1.5;
+  position: relative;
+}
+
+/* Wraps a codeblock that has a language label. This element -- not the
+   <pre> itself -- is what .codeblock-lang is positioned against: <pre>
+   has overflow-x:auto for wide code, and an absolutely-positioned child of
+   a scrolling box scrolls along with its content, so the label used to
+   drift out of view as soon as the code was scrolled horizontally.
+   .codeblock-wrap sits outside that scrolling area, so the label stays
+   pinned to the visible top-right corner regardless of scroll position. */
+.codeblock-wrap {
+  position: relative;
+}
+
+.codeblock-lang {
+  font-family: var(--code-font);
+  font-size: 0.72em;
+  background: var(--color-code-lang-bg);
+  color: var(--dita-fg);
+  padding: 0.1em 0.5em;
+  border-radius: 0 3px 0 3px;
+  position: absolute;
+  top: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+code {
+  font-family: var(--code-font);
+  font-size: 0.9em;
+  color: var(--dita-fg);
+  background: var(--color-code-bg);
+  padding: 0.15em 0.3em;
+  border-radius: 3px;
+}
+
+pre code { background: none; padding: 0; border-radius: 0; }
+
+/* Links */
+.xref { color: var(--color-link); text-decoration: none; }
+.xref:hover { text-decoration: underline; }
+.xref-external { font-style: italic; font-size: 0.9em; opacity: 0.7; }
+.link { color: var(--color-link); text-decoration: none; }
+.link:hover { text-decoration: underline; }
+
+/* Inline formatting */
+.keyword { font-weight: 500; }
+.term { font-style: italic; border-bottom: 1px dotted; }
+/* Phrase span only: the highlight domain (b/i/u/tt/sup/sub/line-through/overline) now also carries the html5 `ph` token and must not be dimmed. overline is the one hi-d member rendered as a <span>, so it is excluded here too. */
+span.ph:not(.unresolved-keyref):not(.overline) { opacity: 0.8; }
+.overline { text-decoration: overline; }
+.unresolved-keyref { opacity: 1; color: #e67e22; border: 1px dashed #e67e22; padding: 0 0.3em; border-radius: 3px; cursor: help; }
+
+/* User Interface domain */
+.uicontrol { font-weight: 500; color: var(--dita-link); }
+.menucascade .uicontrol + .uicontrol::before { content: ' › '; color: var(--color-menucascade-arrow); font-weight: normal; }
+.wintitle { font-style: italic; font-weight: 600; }
+.filepath { font-family: var(--code-font); font-size: 0.9em; padding: 0.1em 0.3em; background: var(--color-code-bg); border-radius: 3px; color: var(--dita-fg); }
+.userinput { font-family: var(--code-font); font-size: 0.9em; padding: 0.1em 0.3em; background: var(--color-code-bg); border-radius: 3px; border: 1px dashed var(--color-border); color: var(--dita-fg); }
+.systemoutput { font-family: var(--code-font); font-size: 0.9em; padding: 0.1em 0.3em; background: var(--color-code-bg); border-radius: 3px; color: var(--dita-fg); }
+.apiname { font-family: var(--code-font); font-size: 0.9em; font-weight: 500; }
+.parmname { font-family: var(--code-font); font-size: 0.9em; font-style: italic; }
+.option { font-family: var(--code-font); font-size: 0.9em; color: var(--color-link); }
+.cmdname { font-family: var(--code-font); font-size: 0.9em; font-weight: 600; }
+.varname { font-family: var(--code-font); font-size: 0.9em; font-style: italic; color: var(--color-link); }
+.msgnum { font-family: var(--code-font); font-size: 0.85em; padding: 0.1em 0.3em; border: 1px solid var(--color-border); border-radius: 3px; }
+/* msgph: the variable/substitutable portion of a message (OASIS DITA 1.3.2,
+   sec. 3.2.7.2) -- semantically a varname-like placeholder embedded in
+   message text, not plain prose. Previously fell through to no dedicated
+   rule and rendered indistinguishable from surrounding text. */
+.msgph { font-family: var(--code-font); font-size: 0.9em; font-style: italic; padding: 0 0.2em; color: var(--color-link); }
+
+/* Programming domain */
+.codeph { font-family: var(--code-font); font-size: 0.9em; background: var(--color-code-bg); padding: 0.1em 0.3em; border-radius: 3px; color: var(--dita-fg); }
+.synph { font-family: var(--code-font); font-size: 0.9em; }
+.kwd { font-weight: 600; font-family: var(--code-font); }
+.var { font-style: italic; font-family: var(--code-font); }
+.oper { font-weight: 600; color: var(--color-link); }
+.sep { color: var(--color-border); }
+.delim { font-weight: 600; color: var(--color-link); }
+.syntaxdiagram { border: 1px solid var(--color-border); border-radius: 4px; padding: 1rem; margin: 1rem 0; overflow-x: auto; }
+.synblk { background: var(--color-code-bg); color: var(--dita-fg); border: 1px solid var(--color-border); border-radius: 4px; padding: 0.75rem; margin: 0.5rem 0; overflow-x: auto; font-family: var(--code-font); font-size: 0.9em; }
+.synnote { font-size: 0.9em; margin: 0.5rem 0; padding: 0.5rem; border-left: 3px solid var(--color-border); }
+.fragment { font-family: var(--code-font); font-size: 0.9em; }
+.fragref { font-family: var(--code-font); font-size: 0.9em; color: var(--color-link); }
+
+/* Software domain */
+.screen { background: var(--color-code-bg); color: var(--dita-fg); border: 1px solid var(--color-border); border-radius: 4px; padding: 1rem; overflow-x: auto; font-family: var(--code-font); font-size: 0.9em; line-height: 1.5; white-space: pre-wrap; }
+.msgph { font-family: var(--code-font); font-size: 0.9em; }
+.msgblock { background: var(--color-code-bg); color: var(--dita-fg); border: 1px solid var(--color-border); border-radius: 4px; padding: 0.75rem; font-family: var(--code-font); font-size: 0.9em; white-space: pre-wrap; }
+
+/* Body elements */
+.lines { background: var(--color-code-bg); color: var(--dita-fg); border: 1px solid var(--color-border); border-radius: 4px; padding: 0.75rem 1rem; font-family: var(--code-font); font-size: 0.9em; line-height: 1.5; white-space: pre-wrap; }
+.fn { font-size: 0.75em; vertical-align: super; cursor: help; color: var(--color-link); }
+cite { font-style: italic; }
+.boolean { font-family: var(--code-font); font-size: 0.9em; font-weight: 500; }
+.tm { font-size: 0.75em; vertical-align: super; }
+.body-div { margin: 0.75rem 0; }
+.section-div { margin: 0.75rem 0; }
+.figgroup { margin: 0.75rem 0; }
+
+/* Parameter lists */
+.parml { margin: 1em 0; }
+.plentry { margin: 0.5em 0; }
+.pt { font-weight: 600; font-family: var(--code-font); font-size: 0.95em; margin-top: 0.5em; }
+.pd { margin-left: 1.5em; }
+
+/* Abbreviation / Glossary */
+.abbreviated-form { border-bottom: 1px dotted var(--color-border); cursor: help; }
+.glossterm { font-weight: 600; font-style: italic; }
+.glossdef { margin-left: 1.5em; }
+.glossentry { margin: 1em 0; }
+
+/* Hazard */
+.hazardstatement { border-left: 4px solid var(--color-danger-border); background: var(--color-danger-bg); color: var(--dita-fg); padding: 0.75rem 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0; }
+.typeofhazard { font-weight: 600; color: var(--color-danger-border); }
+.howtoavoid { margin: 0.5rem 0; }
+.consequence { margin: 0.5rem 0; }
+
+/* Other */
+
+/* Related links */
+.related-links { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--color-border); }
+.related-links h2 { font-size: 1.1em; margin-top: 0; }
+
+/* Quotes */
+blockquote { border-left: 3px solid var(--color-border); margin: 1rem 0; padding: 0.5rem 1rem; font-style: italic; }
+q { font-style: italic; }
+
+/* Section spacing */
+section, .example { margin: 1.5rem 0; }
+} /* @layer dv-base */

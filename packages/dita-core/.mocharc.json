@@ -1,0 +1,5 @@
+{
+  "spec": "dist-test/test/**/*.test.js",
+  "timeout": 10000,
+  "ui": "bdd"
+}

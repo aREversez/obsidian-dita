@@ -1,0 +1,24 @@
+{
+  "name": "obsidian-dita-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "DITA reading view for Obsidian, built on a host-neutral DITA rendering core shared with the VS Code DITA Viewer.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck -w @dita-viewer/core",
+    "test": "npm test -w @dita-viewer/core",
+    "verify": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.17.0",
+    "@types/sax": "^1.2.7",
+    "esbuild": "^0.28.2",
+    "mocha": "^11.8.0",
+    "obsidian": "^1.14.4",
+    "typescript": "^5.7.0"
+  }
+}

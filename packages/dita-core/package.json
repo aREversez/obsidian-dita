@@ -1,0 +1,23 @@
+{
+  "name": "@dita-viewer/core",
+  "version": "0.1.0",
+  "description": "Host-neutral DITA parsing and HTML rendering core, shared by the VS Code DITA Viewer and obsidian-dita.",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./styles/dita-content.css": "./styles/dita-content.css",
+    "./styles/TOKENS.md": "./styles/TOKENS.md"
+  },
+  "files": ["dist", "styles"],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
+    "pretest": "node -e \"require('fs').rmSync('dist-test',{recursive:true,force:true})\" && tsc -p tsconfig.test.json",
+    "test": "mocha --config .mocharc.json"
+  },
+  "dependencies": {
+    "sax": "^1.4.1"
+  }
+}
