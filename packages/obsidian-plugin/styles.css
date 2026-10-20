@@ -1,10 +1,57 @@
-/* Plugin styles live OUTSIDE the preview's Shadow DOM: they size the pane only.
-   Everything inside the preview is styled by dita-content.css plus the theme
-   adapter (src/theme/obsidian-adapter.css). */
-.dita-scroller {
+/* Plugin styles live OUTSIDE the preview's Shadow DOM: they lay out the panes
+   and style the source editor's frame. Everything inside the rendered topic is
+   styled by dita-content.css plus the theme adapter
+   (src/theme/obsidian-adapter.css). Colours here are Obsidian variables only. */
+
+.dita-container {
+  display: flex;
+  flex-direction: column;
   height: 100%;
+}
+
+.dita-panes {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+
+.dita-source,
+.dita-scroller {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dita-source .cm-editor {
+  height: 100%;
+}
+
+.dita-scroller {
   overflow-y: auto;
 }
+
 .dita-view {
   min-height: 100%;
+}
+
+/* Which panes show, by mode. The editor stays mounted while hidden so its
+   undo history and scroll position survive a mode change. */
+.dita-container[data-mode="reading"] .dita-source,
+.dita-container[data-mode="source"] .dita-scroller {
+  display: none;
+}
+
+.dita-container[data-mode="split"] .dita-source {
+  border-right: 1px solid var(--background-modifier-border);
+}
+
+/* Parse or render problem: the last good preview stays underneath. */
+.dita-error {
+  flex: 0 0 auto;
+  padding: var(--size-4-1, 4px) var(--size-4-3, 12px);
+  background-color: color-mix(in srgb, var(--text-error) 12%, var(--background-primary));
+  border-bottom: 1px solid var(--text-error);
+  color: var(--text-error);
+  font-size: var(--font-ui-small, 13px);
+  white-space: pre-wrap;
 }

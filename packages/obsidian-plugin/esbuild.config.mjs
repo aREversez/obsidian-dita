@@ -16,7 +16,26 @@ const options = {
   target: 'es2022',
   platform: 'node', // desktop-only: fs/path come from Electron's Node
   outfile: resolve(out, 'main.js'),
-  external: ['obsidian', 'electron', '@codemirror/*', '@lezer/*', ...builtinModules, ...builtinModules.map((m) => `node:${m}`)],
+  // Obsidian supplies @codemirror/{state,view,language,commands,search,autocomplete}
+  // and @lezer/{common,highlight,lr} at runtime. Bundling a second copy of
+  // @codemirror/state or view breaks instanceof checks, so they stay external.
+  // @codemirror/lang-xml and @lezer/xml are not provided and are bundled.
+  external: [
+    'obsidian',
+    'electron',
+    '@codemirror/state',
+    '@codemirror/view',
+    '@codemirror/language',
+    '@codemirror/commands',
+    '@codemirror/search',
+    '@codemirror/autocomplete',
+    '@codemirror/lint',
+    '@lezer/common',
+    '@lezer/highlight',
+    '@lezer/lr',
+    ...builtinModules,
+    ...builtinModules.map((m) => `node:${m}`),
+  ],
   // The workspace package is bundled from source, so no separate build step.
   alias: { '@dita-viewer/core': resolve(here, '../dita-core/src/index.ts') },
   loader: { '.css': 'text' },
