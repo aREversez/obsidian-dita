@@ -1,12 +1,28 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["node", "mocha"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "node",
+      "mocha"
+    ],
     "noEmit": false,
     "outDir": "dist-test",
     "rootDir": ".",
     "sourceMap": true
   },
-  "include": ["test/**/*", "src/renderFile.ts", "src/theme/colorMath.ts"]
+  "include": [
+    "test/**/*",
+    "src/renderFile.ts",
+    "src/theme/colorMath.ts",
+    "src/viewMode.ts",
+    "src/settings.ts",
+    "src/textDiff.ts",
+    "src/syncLines.ts",
+    "src/debounce.ts"
+  ]
 }
