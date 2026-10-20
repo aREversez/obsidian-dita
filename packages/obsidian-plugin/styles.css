@@ -1,0 +1,10 @@
+/* Plugin styles live OUTSIDE the preview's Shadow DOM: they size the pane only.
+   Everything inside the preview is styled by dita-content.css plus the theme
+   adapter (src/theme/obsidian-adapter.css). */
+.dita-scroller {
+  height: 100%;
+  overflow-y: auto;
+}
+.dita-view {
+  min-height: 100%;
+}

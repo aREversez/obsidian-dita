@@ -1,0 +1,17 @@
+{
+  "name": "obsidian-dita",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DITA reading view for Obsidian.",
+  "license": "MIT",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "pretest": "npm run build -w @dita-viewer/core && node -e \"require('fs').rmSync('dist-test',{recursive:true,force:true})\" && tsc -p tsconfig.test.json",
+    "test": "mocha --config .mocharc.json"
+  },
+  "dependencies": {
+    "@dita-viewer/core": "0.1.0"
+  }
+}

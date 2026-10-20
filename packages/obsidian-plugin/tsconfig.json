@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node", "mocha"],
+    "rootDir": "..",
+    "baseUrl": ".",
+    "paths": { "@dita-viewer/core": ["../dita-core/src/index.ts"] }
+  },
+  "include": ["src/**/*", "test/**/*", "../dita-core/src/**/*"]
+}

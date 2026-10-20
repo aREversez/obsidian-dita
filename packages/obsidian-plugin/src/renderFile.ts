@@ -1,0 +1,66 @@
+// Render one .dita file to an HTML fragment for the preview.
+//
+// Pure with respect to Obsidian: everything it needs from the host comes in as
+// arguments, so it is unit-tested in plain mocha. (DitaView.ts is the part
+// that touches the Obsidian API.)
+
+import { dirname, isAbsolute, relative, resolve, sep } from 'path';
+import { buildKeyMapForDocument, decodeHrefPart, renderTopicXml } from '@dita-viewer/core';
+
+export interface RenderFileInput {
+  /** The topic's source text (read through the vault, so unsaved edits elsewhere are not an issue). */
+  xml: string;
+  /** Absolute path of the topic on disk. */
+  absPath: string;
+  /** Absolute path of the vault root; nothing outside it is read for keys, nor shown as an image. */
+  vaultRoot: string;
+  /** Maps a vault-relative path ("img/a.png") to a URL the preview can load. */
+  toResourceUrl: (vaultRelativePath: string) => string;
+  /** Language for note labels when the topic has no xml:lang (e.g. "zh-cn"). */
+  uiLanguage?: string;
+}
+
+export interface RenderFileResult {
+  html: string;
+  title?: string;
+  error?: string;
+  /** Absolute paths of every file this render read; a change to any of them stales the preview. */
+  dependencies: Set<string>;
+}
+
+export function renderDitaFile(input: RenderFileInput): RenderFileResult {
+  const { xml, absPath, vaultRoot, toResourceUrl, uiLanguage } = input;
+  const docDir = dirname(absPath);
+  const dependencies = new Set<string>([absPath]);
+
+  const asWebviewUri = (relPath: string): string => {
+    const target = resolve(docDir, decodeHrefPart(relPath));
+    const rel = relative(vaultRoot, target);
+    // A path that climbs out of the vault cannot be served as a vault resource.
+    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return '';
+    return toResourceUrl(rel.split(sep).join('/'));
+  };
+
+  try {
+    const keyMap = buildKeyMapForDocument(absPath, {
+      root: vaultRoot,
+      onError: (mapPath, e) => console.warn(`DITA Viewer: could not read keys from ${mapPath}:`, e instanceof Error ? e.message : e),
+    });
+    const result = renderTopicXml({
+      xml,
+      docDir,
+      keyMap,
+      asWebviewUri,
+      headingLevel: 1,
+      uiLanguage,
+      collectDependencies: dependencies,
+      docFile: absPath,
+      // The conref tint carries a "jump to source" button this view does not
+      // have yet, so leave conref'd content unmarked rather than promise one.
+      markConrefs: false,
+    });
+    return { html: result.html, title: result.title, error: result.error, dependencies };
+  } catch (e) {
+    return { html: '', error: e instanceof Error ? e.message : String(e), dependencies };
+  }
+}

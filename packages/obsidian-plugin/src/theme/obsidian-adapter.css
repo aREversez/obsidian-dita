@@ -1,0 +1,111 @@
+/*
+ * Obsidian theme adapter for dita-core.
+ *
+ * This sheet is the only place that knows Obsidian's variable names. It runs
+ * inside the preview's Shadow DOM, after dita-content.css, and does three jobs:
+ *
+ *   1. Define the host tokens (--dita-*) from Obsidian's variables, so the
+ *      preview takes its colours, fonts and size from whatever theme is active.
+ *   2. Derive the callout/profiling palette (--color-*) from Obsidian's colour
+ *      palette with color-mix() against the page background. A derived colour
+ *      is a function of the theme's own variables, so it is right in light and
+ *      dark and in themes this file has never seen.
+ *   3. Pick up the theme's heading look (--h1-size, --h1-color, ...).
+ *
+ * Obsidian defines its variables on <body>; custom properties inherit through
+ * the shadow boundary, theme selectors do not. That is the isolation: a
+ * theme's rules for `table`, `code`, `a`, `blockquote` cannot reach the
+ * preview, while its variables still flow in.
+ *
+ * Users and theme authors can override anything from a CSS snippet by setting
+ * a token on `.dita-view` (outer rules beat :host rules), e.g.
+ *     .dita-view { --dita-link: #c2410c; --dita-note-bg: #eef; }
+ * Hooks: every --dita-* token below, plus --dita-max-width and the
+ * --dita-<kind>-bg / --dita-<kind>-border pairs for note, warning, danger,
+ * important and tip.
+ */
+
+:host {
+  /* Neutralise inherited text styling from the surrounding view (a theme that
+     centres, letter-spaces or upper-cases .view-content must not leak in).
+     `all` does not touch custom properties, so the tokens still flow. */
+  all: initial;
+  display: block;
+  box-sizing: border-box;
+
+  /* 1. Host tokens */
+  --dita-fg: var(--text-normal);
+  --dita-fg-muted: var(--text-muted);
+  --dita-bg: var(--background-primary);
+  --dita-bg-elevated: var(--background-secondary);
+  --dita-border: var(--background-modifier-border);
+  --dita-focus: var(--interactive-accent);
+  --dita-hover-bg: var(--background-modifier-hover);
+  --dita-selected-fg: var(--text-on-accent);
+  --dita-link: var(--link-color, var(--text-accent));
+  --dita-code-bg: var(--code-background, var(--background-secondary));
+  --dita-code-inline-bg: var(--code-background, var(--background-secondary));
+  --dita-font: var(--font-text, var(--font-interface, sans-serif));
+
+  /* Typography the core sheet reads */
+  --body-font: var(--dita-font);
+  --code-font: var(--font-monospace, ui-monospace, monospace);
+  --line-height: var(--line-height-normal, 1.5);
+  --max-width: var(--dita-max-width, var(--file-line-width, 900px));
+
+  font-family: var(--dita-font);
+  font-size: var(--font-text-size, 16px);
+  color: var(--dita-fg);
+  line-height: var(--line-height);
+
+  /* 2. Palette, derived from the theme. The tint strength is 10% for panel
+     backgrounds, which keeps text on them at the contrast the theme chose for
+     its own page background. */
+  --color-border: var(--dita-border);
+  --table-border: var(--background-modifier-border-hover, var(--dita-border));
+  --color-link: var(--dita-link);
+  --color-code-bg: var(--dita-code-bg);
+  --color-code-lang-bg: var(--dita-code-inline-bg);
+
+  --color-note-bg: var(--dita-note-bg, color-mix(in srgb, var(--color-blue) 10%, var(--dita-bg)));
+  --color-warning-bg: var(--dita-warning-bg, color-mix(in srgb, var(--color-orange) 10%, var(--dita-bg)));
+  --color-danger-bg: var(--dita-danger-bg, color-mix(in srgb, var(--color-red) 10%, var(--dita-bg)));
+  --color-important-bg: var(--dita-important-bg, color-mix(in srgb, var(--color-purple) 10%, var(--dita-bg)));
+  --color-tip-bg: var(--dita-tip-bg, color-mix(in srgb, var(--color-green) 10%, var(--dita-bg)));
+  --color-note-border: var(--dita-note-border, var(--color-blue));
+  --color-warning-border: var(--dita-warning-border, var(--color-orange));
+  --color-danger-border: var(--dita-danger-border, var(--color-red));
+  --color-important-border: var(--dita-important-border, var(--color-purple));
+  --color-tip-border: var(--dita-tip-border, var(--color-green));
+
+  /* Conditional-processing highlight and index chips. Text on all of these is
+     the theme's own body colour (chips: with a 20% accent cast), over a faint
+     tint of the accent. The tint shares were chosen so that body text keeps
+     4.5:1 against them even in a theme whose own text/background contrast is
+     only ~5.6 (Solarized dark); test/theme.test.ts checks this against a set
+     of theme archetypes. Raising a share makes the tint more visible and
+     eventually fails that test -- brighter accents belong in the border. */
+  --color-profiling-bg: color-mix(in srgb, var(--color-yellow) 10%, var(--dita-bg));
+  --color-profiling-border: color-mix(in srgb, var(--color-yellow) 55%, var(--dita-bg));
+  --color-profiling-label-bg: color-mix(in srgb, var(--color-yellow) 16%, var(--dita-bg));
+  --color-profiling-label-text: var(--dita-fg);
+  --color-indexterm-chip-bg: color-mix(in srgb, var(--color-blue) 8%, var(--dita-bg));
+  --color-indexterm-chip-text: color-mix(in srgb, var(--color-blue) 20%, var(--dita-fg));
+  --color-menucascade-arrow: var(--dita-fg-muted);
+
+  --color-conref-bg: color-mix(in srgb, var(--dita-fg) 7%, transparent);
+  --color-conref-bar: color-mix(in srgb, var(--dita-fg) 35%, transparent);
+}
+
+/* 3. Theme headings. Fallbacks are the core sheet's own sizes, so a theme that
+   defines none of these changes nothing. */
+.dita-body h1 { font-size: var(--h1-size, 1.8em); font-weight: var(--h1-weight, 600); color: var(--h1-color, inherit); font-family: var(--h1-font, inherit); }
+.dita-body h2 { font-size: var(--h2-size, 1.5em); font-weight: var(--h2-weight, 600); color: var(--h2-color, inherit); font-family: var(--h2-font, inherit); }
+.dita-body h3 { font-size: var(--h3-size, 1.3em); font-weight: var(--h3-weight, 600); color: var(--h3-color, inherit); font-family: var(--h3-font, inherit); }
+.dita-body h4 { font-size: var(--h4-size, 1.15em); font-weight: var(--h4-weight, 600); color: var(--h4-color, inherit); font-family: var(--h4-font, inherit); }
+.dita-body h5 { font-size: var(--h5-size, 1em); font-weight: var(--h5-weight, 600); color: var(--h5-color, inherit); font-family: var(--h5-font, inherit); }
+.dita-body h6 { font-size: var(--h6-size, 1em); font-weight: var(--h6-weight, 600); color: var(--h6-color, inherit); font-family: var(--h6-font, inherit); }
+
+/* Text selection and focus follow the theme's accent. */
+::selection { background: var(--text-selection, color-mix(in srgb, var(--dita-focus) 30%, transparent)); }
+:focus-visible { outline: 2px solid var(--dita-focus); outline-offset: 2px; }
