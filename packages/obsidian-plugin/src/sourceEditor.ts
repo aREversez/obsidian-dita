@@ -10,8 +10,8 @@
 // here, every one is an Obsidian variable (--code-*, --text-*, --background-*,
 // --font-monospace), so the editor changes with the theme.
 
-import { Annotation, EditorState, Extension } from '@codemirror/state';
-import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view';
+import { Annotation, EditorState, Extension, RangeSet, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state';
+import { Decoration, EditorView, GutterMarker, ViewPlugin, ViewUpdate, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumberMarkers, lineNumbers } from '@codemirror/view';
 import { bracketMatching, HighlightStyle, indentUnit, syntaxHighlighting } from '@codemirror/language';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { CompletionSource, autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
@@ -19,6 +19,8 @@ import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 import { tags as t } from '@lezer/highlight';
 import { xml } from '@codemirror/lang-xml';
 import { minimalReplacement } from './textDiff';
+import { ProblemRange } from './sourceDiagnostics';
+import { SourceReference, referenceAt } from './references';
 
 export interface SourceEditorOptions {
   text: string;
@@ -30,6 +32,10 @@ export interface SourceEditorOptions {
   onCursorLine: (line: number) => void;
   /** Tag, attribute and value completion. */
   completion?: CompletionSource;
+  /** Problems in the document, recomputed a moment after typing stops. */
+  lint?: (text: string) => readonly ProblemRange[];
+  /** Ctrl/Cmd+click landed on a reference attribute (href, conref, keyref, ...). */
+  onReference?: (ref: SourceReference, evt: MouseEvent) => void;
 }
 
 export interface SourceEditor {
@@ -49,6 +55,129 @@ export interface SourceEditor {
 
 /** Marks a transaction as coming from `load`, so it is not reported as a user edit. */
 const external = Annotation.define<boolean>();
+
+// ── diagnostics ──
+// Problems arrive from outside the editor (they read other files), so they
+// travel through a state field: the field holds the last set, decorations and
+// gutter dots derive from it, and one effect replaces the whole set.
+
+/** How long the editor waits after the last keystroke before re-checking. */
+const PROBLEM_DELAY_MS = 600;
+
+const setProblems = StateEffect.define<readonly ProblemRange[]>();
+
+const problems = StateField.define<readonly ProblemRange[]>({
+  create: () => [],
+  update(value, tr) {
+    for (const effect of tr.effects) if (effect.is(setProblems)) return effect.value;
+    // Until the scanner catches up, keep each squiggle over the text it was
+    // about: an edit above a problem must move it, not paint the line above.
+    if (tr.docChanged) {
+      return value.flatMap((p) => {
+        const from = tr.changes.mapPos(p.from, 1);
+        const to = tr.changes.mapPos(p.to, -1);
+        return from < to ? [{ ...p, from, to }] : [];
+      });
+    }
+    return value;
+  },
+});
+
+/** Wavy underline under each problem, with the message as its native tooltip. */
+const problemDecorations = EditorView.decorations.compute([problems], (state) => {
+  const ranges = state.field(problems).flatMap((p) => {
+    // The document may have shrunk since the problems arrived; a range past
+    // its end would be rejected when the set is applied.
+    const from = Math.min(p.from, state.doc.length);
+    const to = Math.min(p.to, state.doc.length);
+    if (from >= to) return [];
+    return [
+      Decoration.mark({
+        class: p.severity === 'error' ? 'cm-dita-problem-error' : 'cm-dita-problem-warning',
+        attributes: { title: p.message },
+      }).range(from, to),
+    ];
+  });
+  return Decoration.set(ranges, true);
+});
+
+class ProblemDot extends GutterMarker {
+  constructor(private readonly severity: ProblemRange['severity']) {
+    super();
+  }
+
+  override eq(other: GutterMarker): boolean {
+    return other instanceof ProblemDot && other.severity === this.severity;
+  }
+
+  override toDOM(): Node {
+    const dot = document.createElement('span');
+    dot.className = `cm-dita-problem-dot cm-dita-problem-dot-${this.severity}`;
+    dot.title = this.severity === 'error' ? 'Error' : 'Warning';
+    return dot;
+  }
+}
+
+/** One dot per line that has a problem; an error wins over a warning on the same line. */
+function problemMarkers(state: EditorState): RangeSet<GutterMarker> {
+  const builder = new RangeSetBuilder<GutterMarker>();
+  const byLine = new Map<number, ProblemRange['severity']>();
+  for (const problem of state.field(problems)) {
+    const from = state.doc.lineAt(Math.min(problem.from, state.doc.length)).from;
+    if (byLine.get(from) !== 'error') byLine.set(from, problem.severity);
+  }
+  for (const [from, severity] of [...byLine].sort((a, b) => a[0] - b[0])) {
+    builder.add(from, from, new ProblemDot(severity));
+  }
+  return builder.finish();
+}
+
+const problemLineMarkers = lineNumberMarkers.compute([problems], problemMarkers);
+
+/** Re-checks the document once typing pauses. */
+function problemScanner(lint: (text: string) => readonly ProblemRange[]): Extension {
+  return ViewPlugin.fromClass(
+    class {
+      private timer: ReturnType<typeof setTimeout> | undefined;
+
+      constructor(private readonly view: EditorView) {
+        this.schedule();
+      }
+
+      update(update: ViewUpdate): void {
+        if (update.docChanged) this.schedule();
+      }
+
+      destroy(): void {
+        if (this.timer !== undefined) clearTimeout(this.timer);
+      }
+
+      private schedule(): void {
+        if (this.timer !== undefined) clearTimeout(this.timer);
+        this.timer = setTimeout(() => this.run(), PROBLEM_DELAY_MS);
+      }
+
+      private run(): void {
+        // A pending timer can outlive the pane's editor.
+        if (!this.view.dom.isConnected) return;
+        let found: readonly ProblemRange[] = [];
+        try {
+          found = lint(this.view.state.doc.toString());
+        } catch (e) {
+          console.warn('DITA Viewer: could not check the source:', e instanceof Error ? e.message : e);
+          return;
+        }
+        this.view.dispatch({ effects: setProblems.of(found) });
+      }
+    },
+  );
+}
+
+/** The reference on the caret's own line (a tag that wraps over lines is a rare miss for the hover cursor only). */
+function referenceOnLine(view: EditorView, pos: number): SourceReference | undefined {
+  const line = view.state.doc.lineAt(pos);
+  return referenceAt(line.text, pos - line.from);
+}
 
 const highlightStyle = HighlightStyle.define([
   { tag: [t.angleBracket, t.punctuation], color: 'var(--code-punctuation)' },
@@ -90,6 +219,16 @@ const theme = EditorView.theme({
   '.cm-matchingBracket': { backgroundColor: 'var(--background-modifier-hover)', outline: '1px solid var(--text-faint)' },
   '.cm-selectionMatch': { backgroundColor: 'var(--text-highlight-bg, var(--background-modifier-hover))' },
   '.cm-searchMatch': { backgroundColor: 'var(--text-highlight-bg)' },
+  // Diagnostics: the message is the mark's title (a native tooltip), so no
+  // extra tooltip UI is needed and nothing competes with the theme.
+  '.cm-dita-problem-error': { textDecoration: 'underline wavy var(--text-error)', textUnderlineOffset: '2px' },
+  '.cm-dita-problem-warning': {
+    textDecoration: 'underline wavy var(--text-warning, var(--text-muted))',
+    textUnderlineOffset: '2px',
+  },
+  '.cm-dita-problem-dot': { display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', margin: '0 2px' },
+  '.cm-dita-problem-dot-error': { backgroundColor: 'var(--text-error)' },
+  '.cm-dita-problem-dot-warning': { backgroundColor: 'var(--text-warning, var(--text-muted))' },
   '.cm-tooltip': {
     backgroundColor: 'var(--background-primary)',
     color: 'var(--text-normal)',
@@ -126,6 +265,7 @@ function baseExtensions(opts: SourceEditorOptions): Extension[] {
     EditorView.contentAttributes.of({ spellcheck: 'false', autocapitalize: 'off', autocorrect: 'off' }),
     xml(),
     ...(opts.completion ? [autocompletion({ override: [opts.completion], icons: false })] : []),
+    ...(opts.lint ? [problems, problemDecorations, problemLineMarkers, problemScanner(opts.lint)] : []),
     syntaxHighlighting(highlightStyle),
     theme,
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
@@ -144,6 +284,34 @@ function baseExtensions(opts: SourceEditorOptions): Extension[] {
         return false;
       },
     }),
+    // Ctrl/Cmd+click on a reference: the host decides where it goes. The
+    // handlers live here because only the editor knows which attribute the
+    // pointer is on.
+    ...(opts.onReference
+      ? [
+          EditorView.domEventHandlers({
+            mousedown: (evt, view) => {
+              if (evt.button !== 0 || (!evt.ctrlKey && !evt.metaKey)) return false;
+              const pos = view.posAtCoords({ x: evt.clientX, y: evt.clientY });
+              const reference = pos === null ? undefined : referenceAt(view.state.doc.toString(), pos);
+              if (!reference) return false;
+              evt.preventDefault();
+              opts.onReference!(reference, evt);
+              return true;
+            },
+            // The pointer only changes shape; the click is handled above.
+            mousemove: (evt, view) => {
+              const pos = evt.ctrlKey || evt.metaKey ? view.posAtCoords({ x: evt.clientX, y: evt.clientY }) : null;
+              view.contentDOM.style.cursor = pos !== null && referenceOnLine(view, pos) ? 'pointer' : '';
+              return false;
+            },
+            mouseleave: (_evt, view) => {
+              view.contentDOM.style.cursor = '';
+              return false;
+            },
+          }),
+        ]
+      : []),
   ];
 }
 

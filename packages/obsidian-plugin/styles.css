@@ -50,6 +50,12 @@
   border-right: 1px solid var(--background-modifier-border);
 }
 
+/* Second line under a file's name in the DITA quick switcher. */
+.dita-suggest-path {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller, 12px);
+}
+
 /* Parse or render problem: the last good preview stays underneath. */
 .dita-error {
   flex: 0 0 auto;

@@ -1,7 +1,8 @@
-import { Keymap, Menu, TFile, TextFileView, ViewStateResult, WorkspaceLeaf, FileSystemAdapter, moment, normalizePath, setIcon } from 'obsidian';
-import { dirname, join } from 'path';
+import { FileSystemAdapter, Keymap, Menu, Notice, TFile, TextFileView, ViewStateResult, WorkspaceLeaf, moment, normalizePath, setIcon } from 'obsidian';
+import { dirname, isAbsolute, join, relative, resolve } from 'path';
 import coreCss from '../../dita-core/styles/dita-content.css';
 import adapterCss from './theme/obsidian-adapter.css';
+import { collectDiagnostics, decodeHrefPart, getKeyDefs } from '@dita-viewer/core';
 import { renderDitaFile, renderDitamapFile } from './renderFile';
 import { SettingsProvider } from './settings';
 import { MODE_ICONS, MODE_LABELS, VIEW_MODES, ViewMode, panesFor, parseViewMode, toggleMode } from './viewMode';
@@ -10,6 +11,12 @@ import { createCompletionEnv } from './completionEnv';
 import { ditaCompletionSource } from './completionSource';
 import { Anchor, isOffsetVisible, previewOffsetForLine } from './syncLines';
 import { Debounced, debounce } from './debounce';
+import { ProblemRange, problemRanges } from './sourceDiagnostics';
+import { SourceReference, positionOfId } from './references';
+import { createIdReader } from './fileIds';
+import { badgeBox, badgeHit, conrefKindOf } from './conrefJump';
+import { StructureSpec, WrapSpec } from './snippetsData';
+import { insertStructure, wrapSelection } from './snippets';
 
 export const VIEW_TYPE_DITA = 'dita-viewer-topic';
 
@@ -33,6 +40,24 @@ function getSheets(doc: Document): CSSStyleSheet[] {
 
 /** After the preview is told to jump to a line, ignore the editor's own scroll echo for this long. */
 const SYNC_QUIET_MS = 250;
+
+/** The key a keyref/conkeyref names: everything before the first '/'. */
+function keyNameOf(value: string): string {
+  const slash = value.indexOf('/');
+  return (slash < 0 ? value : value.slice(0, slash)).trim();
+}
+
+/** The path part of an href, percent-decoded and without a query or fragment. */
+function pathOf(href: string): string {
+  const hash = href.indexOf('#');
+  return decodeHrefPart((hash < 0 ? href : href.slice(0, hash)).split('?')[0]);
+}
+
+/** The decoded #fragment of an href, or ''. */
+function fragmentOf(href: string): string {
+  const hash = href.indexOf('#');
+  return hash < 0 ? '' : decodeHrefPart(href.slice(hash + 1));
+}
 
 /**
  * Reading view, source editor and side-by-side live preview for a .dita file.
@@ -68,6 +93,9 @@ export class DitaView extends TextFileView {
   private readonly scheduleRender: Debounced;
   private syncFrame = 0;
   private quietUntil = 0;
+  private readonly idReader = createIdReader();
+  /** A reveal requested through setEphemeralState, applied once the text is loaded. */
+  private pendingReveal?: { line?: number; col?: number; id?: string };
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: SettingsProvider) {
     super(leaf);
@@ -88,7 +116,7 @@ export class DitaView extends TextFileView {
   }
 
   canAcceptExtension(extension: string): boolean {
-    return extension === 'dita';
+    return extension === 'dita' || extension === 'ditamap';
   }
 
   // ── lifecycle ──
@@ -105,8 +133,14 @@ export class DitaView extends TextFileView {
     this.shadow.adoptedStyleSheets = getSheets(this.host.ownerDocument);
     this.body = this.shadow.createDiv({ cls: 'dita-body' });
     this.body.id = 'dita-content-root';
+    // Every reuse badge points its aria-describedby here; the class clips the
+    // node visually but keeps it in the accessibility tree.
+    const conrefHint = this.shadow.createDiv({ cls: 'dv-visually-hidden', text: 'Jump to the source of the reused content' });
+    conrefHint.id = 'dv-conref-jump-hint';
     this.shadow.addEventListener('click', (evt) => this.onClick(evt as MouseEvent));
     this.shadow.addEventListener('contextmenu', (evt) => this.onContextMenu(evt as MouseEvent));
+    this.shadow.addEventListener('pointermove', (evt) => this.onConrefHover(evt as PointerEvent));
+    this.host.addEventListener('pointerleave', () => this.host.classList.remove('dv-conref-hot'));
     // Focusable by click, so Ctrl/Cmd+A selects the topic rather than the whole app.
     this.scroller.tabIndex = -1;
     this.scroller.addEventListener('keydown', (evt) => this.onPreviewKey(evt));
@@ -117,11 +151,14 @@ export class DitaView extends TextFileView {
       onScroll: () => this.queueSyncToPreview(),
       onCursorLine: (line) => this.revealInPreview(line),
       completion: ditaCompletionSource(() => this.completionEnv()),
+      lint: (text) => this.lintSource(text),
+      onReference: (ref, evt) => this.openReference(ref, evt),
     });
 
     this.modeAction = this.addAction(MODE_ICONS[this.mode], 'View mode', (evt) => this.showModeMenu(evt));
     this.updateScheme();
     this.applyMode();
+    this.applyPendingReveal();
   }
 
   private envCache?: { path: string; env: ReturnType<typeof createCompletionEnv> };
@@ -158,12 +195,14 @@ export class DitaView extends TextFileView {
     if (!this.editor) return; // onOpen has not run yet; it seeds the editor from this.data
     this.editor.load(data, clear);
     this.previewStale = true;
+    this.applyPendingReveal();
     // A load is not a keystroke: show it now rather than after the typing delay.
     if (panesFor(this.mode).preview) void this.render();
   }
 
   clear(): void {
     this.data = '';
+    this.pendingReveal = undefined;
     this.scheduleRender.cancel();
     this.editor?.load('', true);
     this.body?.replaceChildren();
@@ -198,6 +237,17 @@ export class DitaView extends TextFileView {
     this.mode = parseViewMode(saved, this.mode);
     if (this.container) this.applyMode();
     await super.setState(state, result);
+  }
+
+  /** Where to put the caret when another view opens this file (conref jump, Ctrl/Cmd+click). */
+  setEphemeralState(state: unknown): void {
+    const saved = (state ?? {}) as { ditaLine?: unknown; ditaCol?: unknown; ditaId?: unknown };
+    const line = typeof saved.ditaLine === 'number' && Number.isFinite(saved.ditaLine) ? saved.ditaLine : undefined;
+    const col = typeof saved.ditaCol === 'number' && Number.isFinite(saved.ditaCol) ? saved.ditaCol : undefined;
+    const id = typeof saved.ditaId === 'string' && saved.ditaId ? saved.ditaId : undefined;
+    if (line === undefined && id === undefined) return;
+    this.pendingReveal = { line, col, id };
+    this.applyPendingReveal();
   }
 
   onPaneMenu(menu: Menu, source: string): void {
@@ -239,6 +289,56 @@ export class DitaView extends TextFileView {
     this.requestSave();
     this.previewStale = true;
     if (panesFor(this.mode).preview) this.scheduleRender();
+  }
+
+  /** True when the source pane is showing, for commands that edit the text. */
+  hasSource(): boolean {
+    return panesFor(this.mode).editor;
+  }
+
+  /** Wrap the selection in `spec`; with nothing selected, leave an empty element. */
+  applyWrap(spec: WrapSpec): void {
+    const view = this.editor?.view;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const edit = wrapSelection(view.state.sliceDoc(sel.from, sel.to), spec);
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: edit.insert },
+      selection: { anchor: sel.from + edit.caret, head: sel.from + edit.caret + edit.select },
+      scrollIntoView: true,
+    });
+    view.focus();
+  }
+
+  /** Insert `spec`'s template at the caret, indented like the current line. */
+  applyStructure(spec: StructureSpec): void {
+    const view = this.editor?.view;
+    if (!view) return;
+    const caret = view.state.selection.main.head;
+    const edit = insertStructure(view.state.sliceDoc(0, caret), caret, spec.template);
+    view.dispatch({
+      changes: { from: caret, insert: edit.insert },
+      selection: { anchor: caret + edit.caret },
+      scrollIntoView: true,
+    });
+    view.focus();
+  }
+
+  /**
+   * Problems in the current source, for the editor's squiggles. Runs after
+   * typing stops, so it may read other files (existence, anchors).
+   */
+  private lintSource(text: string): readonly ProblemRange[] {
+    const file = this.file;
+    const vaultRoot = this.vaultRoot();
+    if (!file || !vaultRoot) return [];
+    const problems = collectDiagnostics({
+      xml: text,
+      absPath: join(vaultRoot, file.path),
+      keys: this.completionEnv()?.keys(),
+      idsIn: this.idReader,
+    });
+    return problemRanges(text.split('\n'), problems);
   }
 
   /** Called by the plugin when a vault file changes. */
@@ -393,7 +493,16 @@ export class DitaView extends TextFileView {
     if ((evt.ctrlKey || evt.metaKey) && !evt.altKey && !evt.shiftKey && evt.key.toLowerCase() === 'a') {
       evt.preventDefault();
       this.selectAllInPreview();
+      return;
     }
+    if (evt.key !== 'Enter' && evt.key !== ' ' && evt.key !== 'Spacebar') return;
+    // The listener sits outside the shadow root, so the target is retargeted
+    // to the host; composedPath()[0] is the element the reader focused.
+    const target = evt.composedPath()[0];
+    const el = target instanceof Element ? target.closest('[data-conref]') : null;
+    if (!el) return;
+    evt.preventDefault();
+    this.jumpToConref(el);
   }
 
   private onContextMenu(evt: MouseEvent): void {
@@ -406,6 +515,14 @@ export class DitaView extends TextFileView {
   }
 
   private onClick(evt: MouseEvent): void {
+    // A reuse badge wins over whatever it sits on: its background is the jump
+    // affordance, the rest of the element still behaves normally.
+    const conref = this.conrefBadge(evt);
+    if (conref) {
+      evt.preventDefault();
+      this.jumpToConref(conref, evt);
+      return;
+    }
     // An outline entry: open the topic it points at. Its href is "#"; the real
     // target is in data-href, relative to the map.
     const entry = (evt.target as Element | null)?.closest('a.map-tree-link[data-href]');
@@ -455,5 +572,136 @@ export class DitaView extends TextFileView {
     // Revealing scrolls the editor; without this the echo would scroll the preview back.
     this.quietUntil = performance.now() + SYNC_QUIET_MS;
     this.editor.reveal(line, Number.isFinite(col) ? col : 0);
+  }
+
+  // ── source navigation ──
+
+  /** Ctrl/Cmd+click in the source: open the file or the key the attribute names. */
+  private openReference(ref: SourceReference, evt: MouseEvent): void {
+    const file = this.file;
+    const vaultRoot = this.vaultRoot();
+    if (!file || !vaultRoot) return;
+    const here = join(vaultRoot, file.path);
+
+    if (ref.kind === 'key') {
+      const key = keyNameOf(ref.value);
+      const keys = this.completionEnv()?.keys();
+      // getKeyDefs indexes its WeakMap by the map instance; completionEnv hands
+      // out that same Map, read-only only so callers do not mutate the cache.
+      const def = keys ? getKeyDefs(keys as Map<string, string>)?.get(key) : undefined;
+      const href = def?.href ?? '';
+      const target = href ? pathOf(href) : '';
+      if (!def || !target) {
+        new Notice(`Key "${key}" has no file target.`);
+        return;
+      }
+      const fragment = fragmentOf(href);
+      this.openSource(resolve(def.baseDir, target), fragment ? { id: fragment } : {}, evt);
+      return;
+    }
+
+    const path = pathOf(ref.value);
+    const fragment = fragmentOf(ref.value);
+    if (!path) {
+      // "#id": a target in this file.
+      if (fragment) this.revealId(fragment);
+      return;
+    }
+    if (/^(https?:|mailto:)/i.test(ref.value)) {
+      window.open(ref.value, '_blank');
+      return;
+    }
+    this.openSource(resolve(dirname(here), path), fragment ? { id: fragment } : {}, evt);
+  }
+
+  /** Open a source position: in this view when it is this file, in another leaf otherwise. */
+  private openSource(absPath: string, place: { line?: number; col?: number; id?: string }, evt?: MouseEvent): void {
+    const vaultRoot = this.vaultRoot();
+    if (!vaultRoot) return;
+    const rel = relative(vaultRoot, absPath);
+    if (rel.startsWith('..') || isAbsolute(rel)) {
+      new Notice('The target file is outside the vault.');
+      return;
+    }
+    const path = normalizePath(rel);
+    if (path === this.file?.path) {
+      if (place.id) this.revealId(place.id);
+      else this.showSource(place.line ?? 0, place.col ?? 0);
+      return;
+    }
+    const target = this.app.vault.getAbstractFileByPath(path);
+    if (!(target instanceof TFile)) {
+      new Notice(`File not found: ${rel}`);
+      return;
+    }
+    void this.app.workspace.getLeaf(evt ? Keymap.isModEvent(evt) : false).openFile(target, {
+      eState: place.id ? { ditaId: place.id } : { ditaLine: place.line ?? 0, ditaCol: place.col ?? 0 },
+    });
+  }
+
+  /** Put the caret on the element that carries `id` in this file. */
+  private revealId(id: string): void {
+    const pos = positionOfId(this.editor.getText(), id);
+    if (!pos) {
+      new Notice(`No element with id "${id}" in this file.`);
+      return;
+    }
+    this.showSource(pos.line, pos.col);
+  }
+
+  /** Bring a source position into view, opening the editor pane when only the preview was showing. */
+  private showSource(line: number, col: number): void {
+    const visible = panesFor(this.mode).editor;
+    if (!visible) this.setMode('split');
+    // Revealing scrolls the editor; without this the echo would scroll the preview back.
+    this.quietUntil = performance.now() + SYNC_QUIET_MS;
+    const reveal = () => {
+      this.editor.reveal(line, col);
+      this.editor.focus();
+    };
+    // A pane that was hidden needs a frame to be laid out before it can scroll.
+    if (visible) reveal();
+    else requestAnimationFrame(reveal);
+  }
+
+  /** Apply a reveal that arrived with the file (setEphemeralState) once its text is here. */
+  private applyPendingReveal(): void {
+    const pending = this.pendingReveal;
+    if (!pending || !this.editor) return;
+    this.pendingReveal = undefined;
+    if (pending.id) {
+      this.revealId(pending.id);
+      return;
+    }
+    this.showSource(pending.line ?? 0, pending.col ?? 0);
+  }
+
+  private vaultRoot(): string | undefined {
+    const adapter = this.app.vault.adapter;
+    return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : undefined;
+  }
+
+  // ── conref jump ──
+
+  /** The reuse badge under the pointer, if any: a background cannot answer that itself. */
+  private conrefBadge(evt: MouseEvent): Element | undefined {
+    const el = (evt.target as Element | null)?.closest('[data-conref]');
+    const win = el?.ownerDocument.defaultView;
+    if (!el || !win) return undefined;
+    const box = badgeBox(el.getBoundingClientRect(), win.getComputedStyle(el), conrefKindOf(el));
+    return badgeHit(box, evt.clientX, evt.clientY) ? el : undefined;
+  }
+
+  private onConrefHover(evt: PointerEvent): void {
+    this.host.classList.toggle('dv-conref-hot', this.conrefBadge(evt) !== undefined);
+  }
+
+  /** The badge was clicked (or Enter/Space pressed on it): open the reused element's source. */
+  private jumpToConref(el: Element, evt?: MouseEvent): void {
+    const file = el.getAttribute('data-conref-file');
+    const line = Number(el.getAttribute('data-conref-line'));
+    const col = Number(el.getAttribute('data-conref-col') ?? 0);
+    if (!file || !Number.isFinite(line)) return;
+    this.openSource(file, { line, col: Number.isFinite(col) ? col : 0 }, evt);
   }
 }

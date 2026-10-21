@@ -56,9 +56,9 @@ export function renderDitaFile(input: RenderFileInput): RenderFileResult {
       uiLanguage,
       collectDependencies: dependencies,
       docFile: absPath,
-      // The conref tint carries a "jump to source" button this view does not
-      // have yet, so leave conref'd content unmarked rather than promise one.
-      markConrefs: false,
+      // The tint carries the reuse badge the preview turns into a jump to the
+      // source of the reused element (DitaView.jumpToConref).
+      markConrefs: true,
     });
     return { html: result.html, title: result.title, error: result.error, dependencies };
   } catch (e) {

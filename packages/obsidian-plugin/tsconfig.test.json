@@ -25,6 +25,12 @@
     "src/settings.ts",
     "src/textDiff.ts",
     "src/syncLines.ts",
-    "src/debounce.ts"
+    "src/debounce.ts",
+    "src/sourceDiagnostics.ts",
+    "src/references.ts",
+    "src/snippets.ts",
+    "src/snippetsData.ts",
+    "src/conrefJump.ts",
+    "src/fileIds.ts"
   ]
 }

@@ -4,6 +4,8 @@ import { DitaView, VIEW_TYPE_DITA } from './DitaView';
 import { DEFAULT_SETTINGS, DitaSettings, SettingsProvider, normalizeSettings } from './settings';
 import { DitaSettingTab } from './settingsTab';
 import { MODE_LABELS, VIEW_MODES } from './viewMode';
+import { DitaFileSwitcher, SnippetPicker } from './pickers';
+import { STRUCTURES, StructureSpec, WRAPS, WrapSpec } from './snippetsData';
 
 export default class DitaViewerPlugin extends Plugin implements SettingsProvider {
   settings: DitaSettings = { ...DEFAULT_SETTINGS };
@@ -37,6 +39,37 @@ export default class DitaViewerPlugin extends Plugin implements SettingsProvider
         if (!checking) view.toggleMode();
         return true;
       },
+    });
+    this.addCommand({
+      id: 'wrap-in-element',
+      name: 'Wrap selection in an element',
+      checkCallback: (checking) => {
+        const view = this.app.workspace.getActiveViewOfType(DitaView);
+        // The selection only exists in the editor, so the command is offered
+        // where the editor is showing.
+        if (!view?.hasSource()) return false;
+        if (!checking) {
+          new SnippetPicker<WrapSpec>(this.app, WRAPS, 'Wrap in…', (spec) => view.applyWrap(spec)).open();
+        }
+        return true;
+      },
+    });
+    this.addCommand({
+      id: 'insert-structure',
+      name: 'Insert a structure',
+      checkCallback: (checking) => {
+        const view = this.app.workspace.getActiveViewOfType(DitaView);
+        if (!view?.hasSource()) return false;
+        if (!checking) {
+          new SnippetPicker<StructureSpec>(this.app, STRUCTURES, 'Insert…', (spec) => view.applyStructure(spec)).open();
+        }
+        return true;
+      },
+    });
+    this.addCommand({
+      id: 'quick-switch',
+      name: 'Quick switch to a DITA file',
+      callback: () => new DitaFileSwitcher(this.app).open(),
     });
 
     // A theme or light/dark switch changes variable values, which the preview
