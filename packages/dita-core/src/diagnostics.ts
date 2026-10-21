@@ -1,0 +1,358 @@
+// Authoring problems in one DITA source file, for a host's editor.
+//
+// Project-owned, not one of the verbatim VS Code files: the viewer's own
+// diagnostics are built on `vscode.Diagnostic`, and this is the part a host
+// without that type needs. Positions are 0-based line/column pairs with an
+// exclusive end, the same convention as the parser's SourceRange.
+//
+// Two passes. The source must first be well-formed XML; a broken document gets
+// that one error and nothing else, because every element position after the
+// error would be a guess. Only then is the tree walked for the mistakes that
+// read fine as XML: references to nothing and ids used twice.
+
+import { existsSync } from 'fs';
+import { dirname, isAbsolute, resolve } from 'path';
+import sax from 'sax';
+import { DitaNode } from './parser/domTypes';
+import { parseDita, parseDitamap, preprocessEntities } from './parser/ditaParser';
+import { decodeHrefPart } from './editor/refResolvers';
+
+export type DiagnosticSeverity = 'error' | 'warning';
+
+export interface DitaDiagnostic {
+  severity: DiagnosticSeverity;
+  message: string;
+  /** 0-based; `endLine`/`endCol` are exclusive. */
+  startLine: number;
+  startCol: number;
+  endLine: number;
+  endCol: number;
+}
+
+export interface DiagnosticsInput {
+  /** The source as it is in the editor, unsaved edits included. */
+  xml: string;
+  /** Absolute path of the document; relative hrefs resolve against its folder. */
+  absPath: string;
+  /** Keys the ditamaps near the document define; see buildKeyMapForDocument. */
+  keys?: ReadonlyMap<string, string>;
+  /**
+   * Existence test for an absolute path. Defaults to fs.existsSync; a host
+   * that can only reach files inside its own workspace passes its own.
+   */
+  fileExists?: (absPath: string) => boolean;
+  /**
+   * The ids another DITA file defines, for `topic.dita#id`. The host reads
+   * and caches them (it knows which files it may read); omitted means
+   * cross-file anchors are not checked.
+   */
+  idsIn?: (absPath: string) => readonly string[] | undefined;
+  /** True for a .ditamap. Defaults to the file extension. */
+  isMap?: boolean;
+}
+
+/** A file whose #id anchors can be checked with idsIn. */
+const DITA_FILE = /\.(dita|ditamap|xml)$/i;
+
+/** `http:`, `mailto:`, `C:` — a reference the vault cannot resolve by path. */
+const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+
+/** Attributes that point at a file or an element. */
+const FILE_ATTRIBUTES = ['href', 'conref', 'conrefend'] as const;
+/** Attributes that point at a key. conkeyref adds an element id after a '/'. */
+const KEY_ATTRIBUTES = ['keyref', 'conkeyref'] as const;
+
+// ── line/column helpers ──
+
+/** Offsets of every line start, so a source position and an offset convert both ways. */
+function lineStarts(text: string): number[] {
+  const starts = [0];
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) starts.push(i + 1);
+  return starts;
+}
+
+function offsetOf(starts: number[], text: string, line: number, col: number): number {
+  const start = starts[Math.min(Math.max(0, line), starts.length - 1)];
+  return Math.min(text.length, start + Math.max(0, col));
+}
+
+function positionOf(starts: number[], offset: number): { line: number; col: number } {
+  let lo = 0;
+  let hi = starts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (starts[mid] <= offset) lo = mid;
+    else hi = mid - 1;
+  }
+  return { line: lo, col: offset - starts[lo] };
+}
+
+/**
+ * Index just past the '>' that closes the tag opening at `start`, skipping
+ * quoted attribute values (a conref can contain '>'), or `start + 1` when the
+ * tag is unterminated.
+ */
+function openingTagEnd(text: string, start: number): number {
+  let quote: string | undefined;
+  for (let i = start + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === quote) quote = undefined;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === '>') {
+      return i + 1;
+    }
+  }
+  return start + 1;
+}
+
+/**
+ * The range to underline for an element: its opening tag. The parser records
+ * the whole element (open through close), which for a container would paint
+ * half the screen for one bad attribute.
+ */
+function openingTagRange(text: string, starts: number[], node: DitaNode): Omit<DitaDiagnostic, 'severity' | 'message'> {
+  const start = offsetOf(starts, text, node.sourceRange.startLine, node.sourceRange.startCol);
+  const end = openingTagEnd(text, start);
+  const endPos = positionOf(starts, end);
+  return {
+    startLine: node.sourceRange.startLine,
+    startCol: node.sourceRange.startCol,
+    endLine: endPos.line,
+    endCol: endPos.col,
+  };
+}
+
+// ── well-formedness ──
+
+/**
+ * Replaces the DOCTYPE declaration with spaces instead of deleting it, so the
+ * line and column SAX reports still match the editor. A DITA DOCTYPE is often
+ * two lines long; deleting it (as preprocessEntities does) would shift every
+ * position after it up by one.
+ */
+function blankDoctype(xml: string): string {
+  const start = xml.indexOf('<!DOCTYPE');
+  if (start < 0) return xml;
+
+  let i = start + '<!DOCTYPE'.length;
+  let quote: string | undefined;
+  let subset = false;
+  for (; i < xml.length; i++) {
+    const ch = xml[i];
+    if (quote) {
+      if (ch === quote) quote = undefined;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === '[') {
+      subset = true;
+    } else if (ch === ']') {
+      subset = false;
+    } else if (ch === '>' && !subset) {
+      i++;
+      break;
+    }
+  }
+  const blanked = xml.slice(start, i).replace(/[^\n]/g, ' ');
+  return xml.slice(0, start) + blanked + xml.slice(i);
+}
+
+/**
+ * The first XML error, with the tag it belongs to underlined where one can be
+ * found. Entity references are resolved first, because DITA sources use `&nbsp;`
+ * and friends without a DTD whose declarations would make them legal.
+ */
+function checkWellFormed(xml: string): DitaDiagnostic | undefined {
+  const source = preprocessEntities(blankDoctype(xml));
+  const parser = sax.parser(true, { trim: false, normalize: false });
+  let failure: { line: number; column: number; message: string } | undefined;
+  parser.onerror = (err) => {
+    failure = { line: parser.line, column: parser.column, message: err.message };
+    // Abort: SAX would otherwise keep parsing whatever follows the error.
+    throw err;
+  };
+  try {
+    parser.write(source).close();
+  } catch {
+    // onerror recorded it; the throw above is only the abort mechanism.
+  }
+  if (!failure) return undefined;
+
+  const message = failure.message.split('\n')[0].trim() || failure.message;
+  const starts = lineStarts(xml);
+  const at = offsetOf(starts, xml, failure.line, Math.max(0, failure.column - 1));
+  // The error points just past the offending character (often a tag's '>').
+  // Widening to the enclosing tag underlines `</para>` rather than one char
+  // after it; at end of file there is no tag, so the position stays as is.
+  const tagStart = Math.max(xml.lastIndexOf('<', at), xml.lastIndexOf('<', at - 1));
+  const tagEnd = tagStart >= 0 ? openingTagEnd(xml, tagStart) : -1;
+  const insideTag = tagStart >= 0 && at < tagEnd;
+  const from = insideTag ? positionOf(starts, tagStart) : positionOf(starts, at);
+  const to = insideTag ? positionOf(starts, tagEnd) : positionOf(starts, Math.min(xml.length, at + 1));
+  return {
+    severity: 'error',
+    message,
+    startLine: from.line,
+    startCol: from.col,
+    endLine: to.line,
+    endCol: to.col,
+  };
+}
+
+// ── document walk ──
+
+function elementChildren(node: DitaNode): DitaNode[] {
+  return (node.children ?? []).filter((c) => c.type === 'element');
+}
+
+function walk(root: DitaNode, visit: (node: DitaNode) => void): void {
+  visit(root);
+  for (const child of elementChildren(root)) walk(child, visit);
+}
+
+/** Every id in the document, mapped to the 0-based line it is first used on. */
+function idsWithLines(root: DitaNode): Map<string, number> {
+  const ids = new Map<string, number>();
+  walk(root, (node) => {
+    const id = node.attributes?.id;
+    if (id && !ids.has(id)) ids.set(id, node.sourceRange.startLine);
+  });
+  return ids;
+}
+
+/**
+ * The key a keyref/conkeyref names: everything before the first '/' (the rest,
+ * if any, is an element id inside the target topic).
+ */
+function keyNameOf(value: string): string {
+  const slash = value.indexOf('/');
+  return (slash < 0 ? value : value.slice(0, slash)).trim();
+}
+
+interface CheckState {
+  text: string;
+  starts: number[];
+  docDir: string;
+  keys: ReadonlyMap<string, string>;
+  fileExists: (absPath: string) => boolean;
+  idsIn?: (absPath: string) => readonly string[] | undefined;
+  /** Ids in this document; #fragments resolve against these. */
+  ownIds: Map<string, number>;
+  /** How many times each id has been reached, for duplicate detection. */
+  seenIds: Map<string, number>;
+  out: DitaDiagnostic[];
+}
+
+function report(state: CheckState, node: DitaNode, message: string): void {
+  state.out.push({ severity: 'warning', message, ...openingTagRange(state.text, state.starts, node) });
+}
+
+/** True when the href names a file this vault can open: no scheme, no absolute path, not marked external. */
+function isLocalRef(node: DitaNode, value: string): boolean {
+  if (node.attributes?.scope === 'external') return false;
+  if (URL_SCHEME.test(value) || isAbsolute(value)) return false;
+  return true;
+}
+
+function checkFileRef(state: CheckState, node: DitaNode, attribute: string): void {
+  const raw = (node.attributes?.[attribute] ?? '').trim();
+  if (!raw || raw === '#') return;
+
+  const hash = raw.indexOf('#');
+  const pathPart = (hash < 0 ? raw : raw.slice(0, hash)).split('?')[0];
+  const fragment = hash < 0 ? '' : raw.slice(hash + 1);
+  if (!pathPart) {
+    // "#id": a target in this file. An id the document does not define is a
+    // broken link even though the file it "points at" trivially exists.
+    if (fragment && !state.ownIds.has(decodeHrefPart(fragment))) {
+      report(state, node, `No element with id "${decodeHrefPart(fragment)}" in this file`);
+    }
+    return;
+  }
+  if (!isLocalRef(node, raw)) return;
+
+  const target = resolve(state.docDir, decodeHrefPart(pathPart));
+  if (!state.fileExists(target)) {
+    report(state, node, `File not found: ${pathPart}`);
+    return;
+  }
+  if (!fragment || !state.idsIn || !DITA_FILE.test(target)) return;
+  const id = decodeHrefPart(fragment);
+  const ids = state.idsIn(target);
+  if (ids && !ids.includes(id)) {
+    report(state, node, `No element with id "${id}" in ${pathPart}`);
+  }
+}
+
+function checkKeyRef(state: CheckState, node: DitaNode, attribute: string): void {
+  const raw = (node.attributes?.[attribute] ?? '').trim();
+  if (!raw) return;
+  const name = keyNameOf(raw);
+  if (name && !state.keys.has(name)) {
+    report(state, node, `Key "${name}" is not defined by the maps near this document`);
+  }
+}
+
+function checkDuplicateId(state: CheckState, node: DitaNode): void {
+  const id = node.attributes?.id;
+  if (!id) return;
+  const seen = state.seenIds.get(id) ?? 0;
+  state.seenIds.set(id, seen + 1);
+  // The first use is the definition; every later one is the mistake. Counted
+  // rather than compared by position so two tags on one line still clash.
+  if (seen > 0) {
+    const first = state.ownIds.get(id);
+    report(state, node, `Duplicate id "${id}"; first used on line ${(first ?? node.sourceRange.startLine) + 1}`);
+  }
+}
+
+/**
+ * What is wrong with this source, sorted by position. An empty array means the
+ * document is well formed and every reference it makes can be resolved.
+ */
+export function collectDiagnostics(input: DiagnosticsInput): DitaDiagnostic[] {
+  const { xml, absPath, keys, fileExists = existsSync, idsIn } = input;
+  const wellFormed = checkWellFormed(xml);
+  if (wellFormed) return [wellFormed];
+
+  const isMap = input.isMap ?? /\.ditamap$/i.test(absPath);
+  let root: DitaNode;
+  try {
+    root = (isMap ? parseDitamap : parseDita)(preprocessEntities(blankDoctype(xml))).root;
+  } catch (e) {
+    // Well-formed, but not something the renderer can walk (an empty root,
+    // say). Report it at the top rather than pretending the file is clean.
+    return [{
+      severity: 'error',
+      message: e instanceof Error ? e.message : String(e),
+      startLine: 0,
+      startCol: 0,
+      endLine: 0,
+      endCol: 0,
+    }];
+  }
+
+  const state: CheckState = {
+    text: xml,
+    starts: lineStarts(xml),
+    docDir: dirname(absPath),
+    keys: keys ?? new Map(),
+    fileExists,
+    idsIn,
+    ownIds: idsWithLines(root),
+    seenIds: new Map(),
+    out: [],
+  };
+
+  walk(root, (node) => {
+    checkDuplicateId(state, node);
+    for (const attribute of KEY_ATTRIBUTES) checkKeyRef(state, node, attribute);
+    // keyref wins over href when both are present (DITA's indirect-first
+    // rule), so a co-located href is a fallback and not worth a warning.
+    if (node.attributes?.keyref) return;
+    for (const attribute of FILE_ATTRIBUTES) checkFileRef(state, node, attribute);
+  });
+
+  return state.out.sort((a, b) => a.startLine - b.startLine || a.startCol - b.startCol);
+}

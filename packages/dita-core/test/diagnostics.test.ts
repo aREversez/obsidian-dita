@@ -1,0 +1,174 @@
+import { strict as assert } from 'assert';
+import { resolve } from 'path';
+import { collectDiagnostics, DiagnosticsInput } from '../src/diagnostics';
+
+const DOC = resolve('/vault/docs/topic.dita');
+
+function diag(xml: string, over: Partial<DiagnosticsInput> = {}) {
+  return collectDiagnostics({ xml, absPath: DOC, fileExists: () => true, ...over });
+}
+
+const messages = (xml: string, over: Partial<DiagnosticsInput> = {}) => diag(xml, over).map((d) => d.message);
+
+describe('diagnostics: well-formedness', () => {
+  it('reports nothing for a clean topic', () => {
+    assert.deepEqual(diag('<topic id="t"><title>Intro</title><body><p>Text</p></body></topic>'), []);
+  });
+
+  it('accepts entities a DITA DTD would declare, and a DOCTYPE', () => {
+    const xml = '<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">\n<topic><title>A&nbsp;B &copy; C</title></topic>';
+    assert.deepEqual(diag(xml), []);
+  });
+
+  it('reports a mismatched close tag on its own line, underlining the tag', () => {
+    const xml = '<topic>\n  <title>x</title>\n  <body><p>text</para></body>\n</topic>';
+    const [d, ...rest] = diag(xml);
+    assert.equal(rest.length, 0);
+    assert.equal(d.severity, 'error');
+    assert.match(d.message, /Unexpected close tag/);
+    assert.equal(d.startLine, 2);
+    assert.equal(d.startCol, 15); // the '<' of </para>
+    assert.equal(d.endCol, 22); // just past its '>'
+  });
+
+  it('reports an unclosed root tag at the end of the file', () => {
+    const [d] = diag('<topic>\n  <title>x</title>');
+    assert.equal(d.severity, 'error');
+    assert.match(d.message, /Unclosed root tag/);
+  });
+
+  it('keeps positions after a multi-line DOCTYPE on their real lines', () => {
+    const xml = '<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN"\n  "topic.dtd">\n<topic>\n  <title>x</title>\n  <body><p>a</para></body>\n</topic>';
+    const [d] = diag(xml);
+    assert.equal(d.startLine, 4);
+    assert.equal(d.startCol, 12);
+  });
+
+  it('stops at the XML error instead of guessing positions past it', () => {
+    const xml = '<topic>\n  <title>x</title>\n  <p href="missing.dita">a</para>\n</topic>';
+    const all = diag(xml, { fileExists: () => false });
+    assert.equal(all.length, 1);
+    assert.equal(all[0].severity, 'error');
+  });
+});
+
+describe('diagnostics: duplicate ids', () => {
+  it('marks the second use and names the first line (1-based)', () => {
+    const xml = '<topic>\n  <p id="a">one</p>\n  <p id="a">two</p>\n</topic>';
+    const [d, ...rest] = diag(xml);
+    assert.equal(rest.length, 0);
+    assert.equal(d.severity, 'warning');
+    assert.equal(d.message, 'Duplicate id "a"; first used on line 2');
+    assert.equal(d.startLine, 2);
+    assert.equal(d.startCol, 2);
+  });
+
+  it('catches two uses on the same line', () => {
+    const xml = '<topic><p id="a"/><p id="a"/></topic>';
+    assert.deepEqual(diag(xml).map((d) => d.startCol), [18]);
+  });
+});
+
+describe('diagnostics: own-document anchors', () => {
+  it('resolves #id against this file', () => {
+    assert.deepEqual(diag('<topic><title>x</title><p href="#intro">a</p><p id="intro"/></topic>'), []);
+  });
+
+  it('reports a #id that no element defines', () => {
+    const xml = '<topic>\n  <title>x</title>\n  <p href="#nope">a</p>\n</topic>';
+    assert.deepEqual(messages(xml), ['No element with id "nope" in this file']);
+  });
+});
+
+describe('diagnostics: files', () => {
+  const exists = (p: string) => p === resolve('/vault/docs/exists.dita') || p === resolve('/vault/docs/img/a.png');
+
+  it('reports a relative href to nothing', () => {
+    const xml = '<topic>\n  <title>x</title>\n  <p><xref href="missing.dita">a</xref></p>\n</topic>';
+    assert.deepEqual(messages(xml, { fileExists: exists }), ['File not found: missing.dita']);
+  });
+
+  it('accepts an existing target and decodes percent escapes', () => {
+    assert.deepEqual(messages('<topic><title>x</title><p><xref href="exists.dita">a</xref></p></topic>', { fileExists: exists }), []);
+    assert.deepEqual(messages('<topic><title>x</title><p><image href="img/a.png"/></p></topic>', { fileExists: exists }), []);
+    assert.deepEqual(messages('<topic><title>x</title><p><xref href="my%20topic.dita">a</xref></p></topic>', { fileExists: (p) => p === resolve('/vault/docs/my topic.dita') }), []);
+  });
+
+  it('leaves external targets alone: a scheme, an absolute path, or scope="external"', () => {
+    const xml = '<topic><title>x</title><p>'
+      + '<xref href="https://example.com/a">a</xref>'
+      + '<xref href="mailto:a@b.c">b</xref>'
+      + '<xref href="/etc/hosts">c</xref>'
+      + '<xref href="www.example.com" scope="external">d</xref>'
+      + '</p></topic>';
+    assert.deepEqual(messages(xml, { fileExists: () => false }), []);
+  });
+
+  it('checks conref and conrefend like href', () => {
+    const xml = '<topic><title>x</title><body>'
+      + '<p conref="missing.dita#p1">a</p>'
+      + '<p conrefend="missing.dita#p2">b</p>'
+      + '</body></topic>';
+    assert.deepEqual(messages(xml, { fileExists: () => false }), ['File not found: missing.dita', 'File not found: missing.dita']);
+  });
+
+  it('checks an anchor inside another DITA file through idsIn', () => {
+    const other = resolve('/vault/docs/other.dita');
+    const xml = '<topic><title>x</title><p><xref href="other.dita#intro">a</xref></p></topic>';
+    const idsIn = (p: string) => (p === other ? ['other', 'intro'] : undefined);
+    assert.deepEqual(messages(xml, { idsIn }), []);
+    assert.deepEqual(messages('<topic><title>x</title><p><xref href="other.dita#nope">a</xref></p></topic>', { idsIn }), [
+      'No element with id "nope" in other.dita',
+    ]);
+  });
+
+  it('does not read a non-DITA target for ids', () => {
+    let asked = 0;
+    const xml = '<topic><title>x</title><p><xref href="a.html#top">a</xref></p></topic>';
+    assert.deepEqual(messages(xml, { idsIn: () => { asked++; return []; } }), []);
+    assert.equal(asked, 0);
+  });
+
+  it('checks topicrefs in a map', () => {
+    const map = resolve('/vault/maps/guide.ditamap');
+    const issues = collectDiagnostics({
+      xml: '<map><title>G</title><topicref href="missing.dita"/></map>',
+      absPath: map,
+      fileExists: () => false,
+    });
+    assert.deepEqual(issues.map((d) => d.message), ['File not found: missing.dita']);
+  });
+});
+
+describe('diagnostics: keys', () => {
+  const keys = new Map([['product', 'Acme']]);
+
+  it('reports a keyref to a key no map defines', () => {
+    const xml = '<topic><title>x</title><p><ph keyref="brand">a</ph></p></topic>';
+    assert.deepEqual(messages(xml, { keys }), ['Key "brand" is not defined by the maps near this document']);
+  });
+
+  it('accepts a defined key, with or without an element id after it', () => {
+    assert.deepEqual(messages('<topic><title>x</title><p><ph keyref="product">a</ph></p></topic>', { keys }), []);
+    assert.deepEqual(messages('<topic><title>x</title><p><ph conkeyref="product/name">a</ph></p></topic>', { keys }), []);
+  });
+
+  it('checks conkeyref against the same key space', () => {
+    assert.deepEqual(messages('<topic><title>x</title><p><ph conkeyref="brand/name">a</ph></p></topic>', { keys }), [
+      'Key "brand" is not defined by the maps near this document',
+    ]);
+  });
+
+  it('does not also report the href that a keyref overrides', () => {
+    const xml = '<topic><title>x</title><p><xref keyref="product" href="missing.dita">a</xref></p></topic>';
+    assert.deepEqual(messages(xml, { keys, fileExists: () => false }), []);
+  });
+});
+
+describe('diagnostics: ordering', () => {
+  it('sorts by position, whatever the checks found first', () => {
+    const xml = '<topic>\n  <p keyref="gone"/>\n  <p id="a"/>\n  <p id="a"/>\n</topic>';
+    const lines = diag(xml, { keys: new Map() }).map((d) => d.startLine);
+    assert.deepEqual(lines, [1, 3]);
+  });
+});

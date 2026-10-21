@@ -7,11 +7,14 @@
 
 export { renderTopicXml, buildTitleMap, collectDitamapFilesUpward } from './editor/topicRender';
 export type { TopicXmlRenderInput, TopicRenderInput, TopicRenderResult, ParsedTopicResult } from './editor/topicRender';
-export { buildKeySpace } from './editor/keySpace';
+export { buildKeySpace, getKeyDefs } from './editor/keySpace';
+export type { KeyHrefDef } from './editor/keySpace';
 export { readSourceText, setSourceOverlay, clearSourceOverlay } from './editor/sourceText';
 export { decodeHrefPart } from './editor/refResolvers';
 export { buildKeyMapForDocument } from './keyMapForDocument';
 export { complete } from './completion';
+export { collectDiagnostics } from './diagnostics';
+export type { DitaDiagnostic, DiagnosticSeverity, DiagnosticsInput } from './diagnostics';
 export type { CompletionEnv, CompletionResult, Suggestion, SuggestionKind } from './completion';
 export { collectReferenceableFiles, toRelativeHref } from './language/referenceableFiles';
 export type { ReadDir, WalkEntry } from './language/referenceableFiles';
