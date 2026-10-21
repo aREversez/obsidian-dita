@@ -15,11 +15,13 @@ Works: all topic types and specializations the core renders, `keyref` /
 (including content from other files, and re-render when those change), images
 inside the vault, MathML, links between topics, light and dark themes, and
 editing the XML source with three view modes (below), tag / attribute / value
-completion in the editor, and the `.ditamap` outline (below).
+completion in the editor, source diagnostics (well-formedness, references to
+nothing, duplicate ids), Ctrl/Cmd+click on a reference to open its target,
+conref "jump to source" in the preview, wrap and insert commands, the
+`.ditamap` outline (below), and a quick switcher for `.dita` / `.ditamap` files.
 
-Not yet: map book and site views, editor diagnostics, conref "jump to source",
-profiling filters, Git compare, DITA-OT. Mobile is not supported because the core reads files through
-Node.
+Not yet: map book and site views, profiling filters, Git compare, DITA-OT.
+Mobile is not supported because the core reads files through Node.
 
 ## View modes
 
@@ -33,10 +35,17 @@ button in the pane header, the pane's "more options" menu, or a command:
 | **Live preview (side by side)** | Source on the left, preview on the right. The preview updates shortly after you stop typing and keeps the last good render while the XML is invalid (an error bar says what is wrong). Scrolling or moving the caret in the source scrolls the preview to the same place; clicking an element in the preview puts the caret on its source. |
 
 Commands (all under "DITA Viewer:"): *Reading view*, *Source mode*, *Live
-preview (side by side)*, and *Toggle reading view and source mode*. No hotkeys
-are assigned; set your own under Settings → Hotkeys. Settings has the default
-mode for newly opened files and the live-preview delay. Each pane remembers the
-mode you last chose for it.
+preview (side by side)*, *Toggle reading view and source mode*, *Wrap selection
+in an element*, *Insert a structure*, and *Quick switch to a DITA file*. No
+hotkeys are assigned; set your own under Settings → Hotkeys. Settings has the
+default mode for newly opened files and the live-preview delay. Each pane
+remembers the mode you last chose for it.
+
+In the source, Ctrl/Cmd+click an `href`, `conref` or `keyref` to open the file
+or key it names; in the preview, click the reuse badge on conref'd content to
+show where it comes from. Diagnostics underline XML errors, references that
+point at nothing and duplicate ids, with the message on hover and a dot in the
+line-number gutter.
 
 Edits are saved by Obsidian as for any text file, and a change to the file on
 disk is merged into the open editor without moving your caret.

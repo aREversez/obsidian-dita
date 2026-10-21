@@ -19,25 +19,25 @@ starting work; update the checkboxes in the same change that finishes an item.
 
 Ordered by value for day-to-day writing; each phase is a separate patch series.
 
-### Phase 0 — check in real Obsidian (needs the maintainer)
+### Phase 0 — check in real Obsidian
 
-Everything so far is verified in a browser harness with a mock of the Obsidian
-API, not in Obsidian itself.
+Done: the items below were checked in Obsidian itself, not only in the browser
+harness with its mock of the Obsidian API.
 
-- [ ] Pane icons (`book-open`, `code`, `separator-vertical`), completion popup,
+- [x] Pane icons (`book-open`, `code`, `separator-vertical`), completion popup,
       context menu, outline click behave as intended.
-- [ ] Look at 2-3 real community themes (preview, outline, editor, popup) and
+- [x] Look at 2-3 real community themes (preview, outline, editor, popup) and
       record problems here.
 
 ### Phase 1 — editing
 
-1. [ ] Diagnostics in the source editor: XML well-formedness with line
+1. [x] Diagnostics in the source editor: XML well-formedness with line
        positions; `href` / `conref` / `keyref` pointing at nothing; duplicate ids.
-2. [ ] Ctrl/Cmd+click in the source on `href`, `conref`, `keyref` opens the target.
-3. [ ] Preview: conref "jump to source" (currently `markConrefs: false`).
-4. [ ] Commands: wrap the selection (`<b>`, `<codeph>`, ...), insert common
+2. [x] Ctrl/Cmd+click in the source on `href`, `conref`, `keyref` opens the target.
+3. [x] Preview: conref "jump to source" (currently `markConrefs: false`).
+4. [x] Commands: wrap the selection (`<b>`, `<codeph>`, ...), insert common
        structures (step, note, table skeleton).
-5. [ ] Quick switcher entry for `.dita` / `.ditamap` files.
+5. [x] Quick switcher entry for `.dita` / `.ditamap` files.
 
 ### Phase 2 — maps
 
