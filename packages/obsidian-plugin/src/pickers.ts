@@ -3,7 +3,7 @@
 // Obsidian imports live only here; the snippets themselves are data
 // (snippetsData.ts), so their wording and indentation stay testable.
 
-import { App, Keymap, SuggestModal, TFile } from 'obsidian';
+import { App, Keymap, Platform, SuggestModal, TFile } from 'obsidian';
 
 /** How many paths the quick switcher offers at once; typing narrows the list anyway. */
 const MAX_SUGGESTIONS = 200;
@@ -44,6 +44,20 @@ export class DitaFileSwitcher extends SuggestModal<TFile> {
       .filter((file) => file.extension === 'dita' || file.extension === 'ditamap')
       .sort((a, b) => a.path.localeCompare(b.path));
     this.setPlaceholder('Open a DITA topic or map…');
+    this.setInstructions([
+      { command: '↵', purpose: 'to open' },
+      { command: Platform.isMacOS ? 'cmd ↵' : 'ctrl ↵', purpose: 'to open in new tab' },
+    ]);
+    // A suggest modal only binds a bare Enter. Ctrl/Cmd+Enter goes through the
+    // modal's own chooser (the same path Enter takes) so the event reaches
+    // onChooseSuggestion with its modifier; if a future Obsidian drops the
+    // chooser, the key just does nothing rather than throwing.
+    this.scope.register(['Mod'], 'Enter', (evt: KeyboardEvent) => {
+      const chooser = (this as unknown as { chooser?: { useSelectedItem(e: KeyboardEvent): void } }).chooser;
+      if (!chooser) return true;
+      chooser.useSelectedItem(evt);
+      return false;
+    });
   }
 
   getSuggestions(query: string): TFile[] {

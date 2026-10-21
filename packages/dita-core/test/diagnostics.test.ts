@@ -208,6 +208,46 @@ describe('diagnostics: positions with named entities', () => {
   });
 });
 
+describe('diagnostics: a tag left open', () => {
+  it('blames the tag missing its ">" rather than the tag that follows it', () => {
+    const xml = '<concept id="a"\n  <title>Alpha</title>\n  <conbody/>\n</concept>';
+    const [d, ...rest] = diag(xml);
+    assert.equal(rest.length, 0);
+    assert.equal(d.severity, 'error');
+    assert.equal(d.message, 'The <concept> tag is missing its closing ">"');
+    assert.deepEqual([d.startLine, d.startCol, d.endLine, d.endCol], [0, 0, 0, 15]);
+  });
+
+  it('still reports an ordinary mismatch on the tag itself', () => {
+    const xml = '<topic>\n  <p>x</q>\n</topic>';
+    const [d] = diag(xml);
+    assert.equal(d.message.includes('missing its closing'), false);
+    assert.equal(d.startLine, 1);
+  });
+});
+
+describe('diagnostics: topic/element fragments', () => {
+  const ids = (list: string[]) => ({ idsIn: () => list });
+
+  it('accepts topicid/elementid when both exist', () => {
+    const xml = '<topic><title>x</title><p><xref href="b.dita#b/target">a</xref><p conref="b.dita#b/target"/></p></topic>';
+    assert.deepEqual(messages(xml, ids(['b', 'target'])), []);
+  });
+
+  it('names the half that is missing', () => {
+    const xml = '<topic><title>x</title><p><xref href="b.dita#b/nope">a</xref><xref href="b.dita#zz/target">b</xref></p></topic>';
+    assert.deepEqual(messages(xml, ids(['b', 'target'])), [
+      'No element with id "nope" in b.dita',
+      'No element with id "zz" in b.dita',
+    ]);
+  });
+
+  it('applies the same rule to #topicid/elementid inside this file', () => {
+    const own = '<concept id="c"><title>x</title><conbody><p id="p1"/><p><xref href="#c/p1">a</xref><xref href="#c/p9">b</xref></p></conbody></concept>';
+    assert.deepEqual(messages(own), ['No element with id "p9" in this file']);
+  });
+});
+
 describe('diagnostics: ordering', () => {
   it('sorts by position, whatever the checks found first', () => {
     const xml = '<topic>\n  <p keyref="gone"/>\n  <p id="a"/>\n  <p id="a"/>\n</topic>';

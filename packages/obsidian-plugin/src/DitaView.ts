@@ -2,7 +2,7 @@ import { FileSystemAdapter, Keymap, Menu, Notice, TFile, TextFileView, ViewState
 import { dirname, isAbsolute, join, relative, resolve } from 'path';
 import coreCss from '../../dita-core/styles/dita-content.css';
 import adapterCss from './theme/obsidian-adapter.css';
-import { collectDiagnostics, decodeHrefPart, getKeyDefs } from '@dita-viewer/core';
+import { collectDiagnostics, decodeHrefPart, getKeyDefs, splitRefFragment } from '@dita-viewer/core';
 import { renderDitaFile, renderDitamapFile } from './renderFile';
 import { SettingsProvider } from './settings';
 import { MODE_ICONS, MODE_LABELS, VIEW_MODES, ViewMode, panesFor, parseViewMode, toggleMode } from './viewMode';
@@ -626,7 +626,7 @@ export class DitaView extends TextFileView {
     const path = normalizePath(rel);
     if (path === this.file?.path) {
       if (place.id) this.revealId(place.id);
-      else this.showSource(place.line ?? 0, place.col ?? 0);
+      else if (place.line !== undefined) this.showSource(place.line, place.col ?? 0);
       return;
     }
     const target = this.app.vault.getAbstractFileByPath(path);
@@ -634,13 +634,21 @@ export class DitaView extends TextFileView {
       new Notice(`File not found: ${rel}`);
       return;
     }
-    void this.app.workspace.getLeaf(evt ? Keymap.isModEvent(evt) : false).openFile(target, {
-      eState: place.id ? { ditaId: place.id } : { ditaLine: place.line ?? 0, ditaCol: place.col ?? 0 },
-    });
+    // With no position to show, open the file the way any link would, in
+    // whatever mode the user has set; a position needs the source pane.
+    const eState = place.id
+      ? { ditaId: place.id }
+      : place.line !== undefined
+        ? { ditaLine: place.line, ditaCol: place.col ?? 0 }
+        : undefined;
+    void this.app.workspace.getLeaf(evt ? Keymap.isModEvent(evt) : false).openFile(target, eState ? { eState } : undefined);
   }
 
   /** Put the caret on the element that carries `id` in this file. */
-  private revealId(id: string): void {
+  private revealId(fragment: string): void {
+    // A fragment is "topicid" or "topicid/elementid"; the caret goes to the
+    // element, which is the part after the slash.
+    const id = splitRefFragment(fragment).elementId;
     const pos = positionOfId(this.editor.getText(), id);
     if (!pos) {
       new Notice(`No element with id "${id}" in this file.`);
@@ -668,6 +676,9 @@ export class DitaView extends TextFileView {
   private applyPendingReveal(): void {
     const pending = this.pendingReveal;
     if (!pending || !this.editor) return;
+    // An id is looked up in the text, so wait until the file's text is in the
+    // editor; setViewData calls this again once it is.
+    if (pending.id && this.editor.getText() === '') return;
     this.pendingReveal = undefined;
     if (pending.id) {
       this.revealId(pending.id);

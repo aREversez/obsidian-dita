@@ -11,7 +11,7 @@
 // --font-monospace), so the editor changes with the theme.
 
 import { Annotation, EditorState, Extension, RangeSet, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state';
-import { Decoration, EditorView, GutterMarker, ViewPlugin, ViewUpdate, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumberMarkers, lineNumbers } from '@codemirror/view';
+import { Decoration, EditorView, GutterMarker, ViewPlugin, ViewUpdate, drawSelection, gutter, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view';
 import { bracketMatching, HighlightStyle, indentUnit, syntaxHighlighting } from '@codemirror/language';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { CompletionSource, autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
@@ -132,7 +132,17 @@ function problemMarkers(state: EditorState): RangeSet<GutterMarker> {
   return builder.finish();
 }
 
-const problemLineMarkers = lineNumberMarkers.compute([problems], problemMarkers);
+/**
+ * The dots sit in a gutter of their own, left of the line numbers. Putting the
+ * markers on the line-number gutter instead would replace the numbers: a
+ * marker that draws anything hides the number it sits on.
+ */
+const problemGutter = gutter({
+  class: 'cm-dita-problem-gutter',
+  markers: (view) => problemMarkers(view.state),
+  lineMarkerChange: (update) => update.transactions.some((tr) => tr.effects.some((e) => e.is(setProblems))) || update.docChanged,
+  initialSpacer: () => new ProblemDot('error'),
+});
 
 /** Re-checks the document once typing pauses. */
 function problemScanner(lint: (text: string) => readonly ProblemRange[]): Extension {
@@ -251,6 +261,7 @@ const theme = EditorView.theme({
 
 function baseExtensions(opts: SourceEditorOptions): Extension[] {
   return [
+    ...(opts.lint ? [problems, problemGutter] : []),
     lineNumbers(),
     highlightActiveLineGutter(),
     highlightActiveLine(),
@@ -265,7 +276,7 @@ function baseExtensions(opts: SourceEditorOptions): Extension[] {
     EditorView.contentAttributes.of({ spellcheck: 'false', autocapitalize: 'off', autocorrect: 'off' }),
     xml(),
     ...(opts.completion ? [autocompletion({ override: [opts.completion], icons: false })] : []),
-    ...(opts.lint ? [problems, problemDecorations, problemLineMarkers, problemScanner(opts.lint)] : []),
+    ...(opts.lint ? [problemDecorations, problemScanner(opts.lint)] : []),
     syntaxHighlighting(highlightStyle),
     theme,
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),

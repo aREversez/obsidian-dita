@@ -16,6 +16,7 @@ import sax from 'sax';
 import { DitaNode } from './parser/domTypes';
 import { parseDita, parseDitamap } from './parser/ditaParser';
 import { decodeHrefPart } from './editor/refResolvers';
+import { splitRefFragment } from './language/ditaLanguageUtils';
 
 export type DiagnosticSeverity = 'error' | 'warning';
 
@@ -208,6 +209,23 @@ function checkWellFormed(xml: string): DitaDiagnostic | undefined {
   const tagStart = Math.max(xml.lastIndexOf('<', at), xml.lastIndexOf('<', at - 1));
   const tagEnd = tagStart >= 0 ? openingTagEnd(xml, tagStart) : -1;
   const insideTag = tagStart >= 0 && at < tagEnd;
+  // A tag whose '>' is missing swallows the next one, and the parser only
+  // notices at that next tag. Blame the tag that was left open.
+  const previous = insideTag ? xml.lastIndexOf('<', tagStart - 1) : -1;
+  if (previous >= 0 && /[A-Za-z_:]/.test(xml[previous + 1] ?? '') && openingTagEnd(xml, previous) > tagStart) {
+    const name = /^<([^\s/>]+)/.exec(xml.slice(previous))?.[1] ?? '';
+    const end = previous + xml.slice(previous, tagStart).trimEnd().length;
+    const a = positionOf(starts, previous);
+    const b = positionOf(starts, end);
+    return {
+      severity: 'error',
+      message: `The <${name}> tag is missing its closing ">"`,
+      startLine: a.line,
+      startCol: a.col,
+      endLine: b.line,
+      endCol: b.col,
+    };
+  }
   const from = insideTag ? positionOf(starts, tagStart) : positionOf(starts, at);
   const to = insideTag ? positionOf(starts, tagEnd) : positionOf(starts, Math.min(xml.length, at + 1));
   return {
@@ -239,6 +257,17 @@ function idsWithLines(root: DitaNode): Map<string, number> {
     if (id && !ids.has(id)) ids.set(id, node.sourceRange.startLine);
   });
   return ids;
+}
+
+/**
+ * The first id a `#fragment` names that `has` does not know. A fragment is
+ * `topicid` or `topicid/elementid` (DITA's two-part form), so both halves must
+ * exist; a single id may be a topic's or an element's.
+ */
+export function missingFragmentId(fragment: string, has: (id: string) => boolean): string | undefined {
+  const { topicId, elementId } = splitRefFragment(fragment);
+  const wanted = topicId ? [topicId, elementId] : [elementId];
+  return wanted.filter((id) => id !== '').find((id) => !has(id));
 }
 
 /**
@@ -288,9 +317,8 @@ function checkFileRef(state: CheckState, node: DitaNode, attribute: string): voi
   if (!pathPart) {
     // "#id": a target in this file. An id the document does not define is a
     // broken link even though the file it "points at" trivially exists.
-    if (fragment && !state.ownIds.has(decodeHrefPart(fragment))) {
-      report(state, node, `No element with id "${decodeHrefPart(fragment)}" in this file`);
-    }
+    const missing = fragment ? missingFragmentId(decodeHrefPart(fragment), (id) => state.ownIds.has(id)) : undefined;
+    if (missing !== undefined) report(state, node, `No element with id "${missing}" in this file`);
     return;
   }
   if (!isLocalRef(node, raw)) return;
@@ -301,11 +329,9 @@ function checkFileRef(state: CheckState, node: DitaNode, attribute: string): voi
     return;
   }
   if (!fragment || !state.idsIn || !DITA_FILE.test(target)) return;
-  const id = decodeHrefPart(fragment);
   const ids = state.idsIn(target);
-  if (ids && !ids.includes(id)) {
-    report(state, node, `No element with id "${id}" in ${pathPart}`);
-  }
+  const missing = ids ? missingFragmentId(decodeHrefPart(fragment), (id) => ids.includes(id)) : undefined;
+  if (missing !== undefined) report(state, node, `No element with id "${missing}" in ${pathPart}`);
 }
 
 function checkKeyRef(state: CheckState, node: DitaNode, attribute: string): void {
