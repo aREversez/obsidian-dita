@@ -1,4 +1,4 @@
-import { FileSystemAdapter, Plugin, TAbstractFile } from 'obsidian';
+import { FileSystemAdapter, Plugin } from 'obsidian';
 import { join } from 'path';
 import { DitaView, VIEW_TYPE_DITA } from './DitaView';
 import { DEFAULT_SETTINGS, DitaSettings, SettingsProvider, normalizeSettings } from './settings';
@@ -76,10 +76,21 @@ export default class DitaViewerPlugin extends Plugin implements SettingsProvider
     // follows on its own; only the scheme flag needs a nudge.
     this.registerEvent(this.app.workspace.on('css-change', () => this.eachView((v) => v.updateScheme())));
 
-    // Re-render when a file the topic pulls content from (conref targets, key
-    // maps, ...) changes on disk. The topic itself is not handled here: the
-    // view reloads its own file and renders from that.
-    this.registerEvent(this.app.vault.on('modify', (file) => this.onVaultChange(file)));
+    // Re-render and re-check when a file the topic references (conref targets,
+    // key maps, ...) or the topic links to changes on disk. The topic itself
+    // is not handled here: the view reloads its own file and renders from that.
+    // Creation and deletion matter too: "File not found" is fixed by creating
+    // the missing file, and a new or removed map changes the key space.
+    this.registerEvent(this.app.vault.on('modify', (file) => this.onVaultChange(file.path, isMapPath(file.path))));
+    this.registerEvent(this.app.vault.on('create', (file) => this.onVaultChange(file.path, isMapPath(file.path))));
+    this.registerEvent(this.app.vault.on('delete', (file) => this.onVaultChange(file.path, isMapPath(file.path))));
+    this.registerEvent(
+      this.app.vault.on('rename', (file, oldPath) => {
+        const map = isMapPath(file.path) || isMapPath(oldPath);
+        this.onVaultChange(oldPath, map);
+        this.onVaultChange(file.path, map);
+      }),
+    );
   }
 
   async saveSettings(): Promise<void> {
@@ -92,13 +103,22 @@ export default class DitaViewerPlugin extends Plugin implements SettingsProvider
     }
   }
 
-  private onVaultChange(file: TAbstractFile): void {
+  /**
+   * Re-render and re-check the views that read `path`. A .ditamap passes
+   * `everyView`: a change there can define or undefine keys of every nearby
+   * topic, and a newly created map was not in any view's dependency list.
+   */
+  private onVaultChange(path: string, everyView = false): void {
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) return;
-    const abs = join(adapter.getBasePath(), file.path);
+    const abs = join(adapter.getBasePath(), path);
     this.eachView((view) => {
-      if (view.file?.path === file.path) return;
-      if (view.dependsOnAbsolutePath(abs)) void view.refresh();
+      if (view.file?.path === path) return;
+      if (everyView || view.dependsOnAbsolutePath(abs)) void view.refresh();
     });
   }
+}
+
+function isMapPath(path: string): boolean {
+  return /\.ditamap$/i.test(path);
 }

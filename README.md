@@ -45,7 +45,9 @@ In the source, Ctrl/Cmd+click an `href`, `conref` or `keyref` to open the file
 or key it names; in the preview, click the reuse badge on conref'd content to
 show where it comes from. Diagnostics underline XML errors, references that
 point at nothing and duplicate ids, with the message on hover and a dot in the
-line-number gutter.
+line-number gutter. A reference is re-checked when the file or key map it
+depends on changes on disk, so fixing the target clears the warning without
+reopening the document.
 
 Edits are saved by Obsidian as for any text file, and a change to the file on
 disk is merged into the open editor without moving your caret.

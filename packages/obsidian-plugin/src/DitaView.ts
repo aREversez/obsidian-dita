@@ -86,6 +86,8 @@ export class DitaView extends TextFileView {
   private modeAction!: HTMLElement;
 
   private dependencies = new Set<string>();
+  /** Files the last diagnostics run read (reference targets, key maps). */
+  private lintDependencies = new Set<string>();
   private rendering = false;
   private renderAgain = false;
   /** The preview does not show the current text (it was edited while no preview was visible, or since the last render). */
@@ -207,6 +209,7 @@ export class DitaView extends TextFileView {
     this.editor?.load('', true);
     this.body?.replaceChildren();
     this.dependencies.clear();
+    this.lintDependencies.clear();
     this.showError(undefined);
     this.previewStale = true;
   }
@@ -331,23 +334,33 @@ export class DitaView extends TextFileView {
   private lintSource(text: string): readonly ProblemRange[] {
     const file = this.file;
     const vaultRoot = this.vaultRoot();
+    this.lintDependencies = new Set();
     if (!file || !vaultRoot) return [];
+    const env = this.completionEnv();
+    const dependencies = new Set<string>();
     const problems = collectDiagnostics({
       xml: text,
       absPath: join(vaultRoot, file.path),
-      keys: this.completionEnv()?.keys(),
+      keys: env?.keys(),
+      keyFiles: env?.keyFiles(),
       idsIn: this.idReader,
+      collectDependencies: dependencies,
     });
+    this.lintDependencies = dependencies;
     return problemRanges(text.split('\n'), problems);
   }
 
   /** Called by the plugin when a vault file changes. */
   dependsOnAbsolutePath(absPath: string): boolean {
-    return this.dependencies.has(absPath);
+    return this.dependencies.has(absPath) || this.lintDependencies.has(absPath);
   }
 
   /** Re-render after something the topic references (not the topic itself) changed. */
   async refresh(): Promise<void> {
+    // The keys and anchors the check reads are cached for a moment; a change
+    // on disk is exactly when that cache is wrong.
+    this.envCache = undefined;
+    this.editor?.recheck();
     this.previewStale = true;
     if (panesFor(this.mode).preview) await this.render();
   }

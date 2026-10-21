@@ -31,4 +31,8 @@ describe('completionEnv', () => {
   it('never throws when keys cannot be read', () => {
     assert.ok(env.keys() instanceof Map);
   });
+
+  it('reports the maps its keys came from, so the host can watch them', () => {
+    assert.deepEqual(env.keyFiles(), [join(root, 'm.ditamap')]);
+  });
 });

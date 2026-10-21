@@ -248,6 +248,49 @@ describe('diagnostics: topic/element fragments', () => {
   });
 });
 
+describe('diagnostics: dependencies', () => {
+  it('collects every reference target, existing or not', () => {
+    const collect = new Set<string>();
+    const xml = '<topic><title>x</title><body>'
+      + '<p><xref href="other.dita#intro">a</xref></p>'
+      + '<p><image href="img/a.png"/></p>'
+      + '<p conref="missing.dita#p1">b</p>'
+      + '</body></topic>';
+    diag(xml, {
+      collectDependencies: collect,
+      idsIn: () => ['intro'],
+      fileExists: (p) => p === resolve('/vault/docs/other.dita'),
+    });
+    assert.deepEqual([...collect].sort(), [
+      resolve('/vault/docs/img/a.png'),
+      resolve('/vault/docs/missing.dita'),
+      resolve('/vault/docs/other.dita'),
+    ].sort());
+  });
+
+  it('leaves external references and same-file anchors out', () => {
+    const collect = new Set<string>();
+    const xml = '<topic><title>x</title><body>'
+      + '<p href="#own"/><p id="own"/>'
+      + '<p><xref href="https://example.com/a">a</xref></p>'
+      + '<p><xref href="other.dita" scope="peer">b</xref></p>'
+      + '</body></topic>';
+    diag(xml, { collectDependencies: collect, fileExists: () => false });
+    assert.deepEqual([...collect], []);
+  });
+
+  it('collects the maps the key space came from', () => {
+    const collect = new Set<string>();
+    const map = resolve('/vault/maps/keys.ditamap');
+    diag('<topic><title>x</title><p><ph keyref="product">a</ph></p></topic>', {
+      collectDependencies: collect,
+      keys: new Map([['product', 'Acme']]),
+      keyFiles: [map],
+    });
+    assert.deepEqual([...collect], [map]);
+  });
+});
+
 describe('diagnostics: ordering', () => {
   it('sorts by position, whatever the checks found first', () => {
     const xml = '<topic>\n  <p keyref="gone"/>\n  <p id="a"/>\n  <p id="a"/>\n</topic>';

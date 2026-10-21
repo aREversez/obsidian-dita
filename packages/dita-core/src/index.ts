@@ -8,10 +8,10 @@
 export { renderTopicXml, buildTitleMap, collectDitamapFilesUpward } from './editor/topicRender';
 export type { TopicXmlRenderInput, TopicRenderInput, TopicRenderResult, ParsedTopicResult } from './editor/topicRender';
 export { buildKeySpace, getKeyDefs } from './editor/keySpace';
-export type { KeyHrefDef } from './editor/keySpace';
+export type { KeyHrefDef, KeySpace } from './editor/keySpace';
 export { readSourceText, setSourceOverlay, clearSourceOverlay } from './editor/sourceText';
 export { decodeHrefPart } from './editor/refResolvers';
-export { buildKeyMapForDocument } from './keyMapForDocument';
+export { buildKeyMapForDocument, buildKeySpaceForDocument } from './keyMapForDocument';
 export { complete } from './completion';
 export { collectDiagnostics } from './diagnostics';
 export type { DitaDiagnostic, DiagnosticSeverity, DiagnosticsInput } from './diagnostics';

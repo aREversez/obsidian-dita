@@ -47,6 +47,8 @@ export interface SourceEditor {
   topLine(): number;
   /** Move the caret to a 0-based line/column and bring it into view. */
   reveal(line: number, col: number): void;
+  /** Re-check the source now (a file the check reads changed on disk). */
+  recheck(): void;
   /** Call after the editor's container goes from hidden to visible. */
   remeasure(): void;
   focus(): void;
@@ -65,6 +67,18 @@ const external = Annotation.define<boolean>();
 const PROBLEM_DELAY_MS = 600;
 
 const setProblems = StateEffect.define<readonly ProblemRange[]>();
+
+/** Runs the check over the current text. Undefined when the view is gone or the check failed. */
+function checkSource(view: EditorView, lint: (text: string) => readonly ProblemRange[]): readonly ProblemRange[] | undefined {
+  // A pending timer can outlive the pane's editor.
+  if (!view.dom.isConnected) return undefined;
+  try {
+    return lint(view.state.doc.toString());
+  } catch (e) {
+    console.warn('DITA Viewer: could not check the source:', e instanceof Error ? e.message : e);
+    return undefined;
+  }
+}
 
 const problems = StateField.define<readonly ProblemRange[]>({
   create: () => [],
@@ -168,16 +182,12 @@ function problemScanner(lint: (text: string) => readonly ProblemRange[]): Extens
       }
 
       private run(): void {
-        // A pending timer can outlive the pane's editor.
-        if (!this.view.dom.isConnected) return;
-        let found: readonly ProblemRange[] = [];
-        try {
-          found = lint(this.view.state.doc.toString());
-        } catch (e) {
-          console.warn('DITA Viewer: could not check the source:', e instanceof Error ? e.message : e);
-          return;
+        if (this.timer !== undefined) {
+          clearTimeout(this.timer);
+          this.timer = undefined;
         }
-        this.view.dispatch({ effects: setProblems.of(found) });
+        const found = checkSource(this.view, lint);
+        if (found) this.view.dispatch({ effects: setProblems.of(found) });
       }
     },
   );
@@ -359,6 +369,14 @@ export function createSourceEditor(parent: HTMLElement, opts: SourceEditorOption
       const target = doc.line(Math.min(doc.lines, Math.max(1, line + 1)));
       const pos = Math.min(target.to, target.from + Math.max(0, col));
       view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: 'center' }) });
+    },
+
+    recheck() {
+      if (!opts.lint) return;
+      // Called by the host when a file the check reads changed, not during an
+      // editor update, so dispatching the new set here is safe.
+      const found = checkSource(view, opts.lint);
+      if (found) view.dispatch({ effects: setProblems.of(found) });
     },
 
     remeasure: () => view.requestMeasure(),

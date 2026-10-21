@@ -8,7 +8,7 @@
 
 import { dirname } from 'path';
 import { collectDitamapFilesUpward } from './editor/topicRender';
-import { buildKeySpace } from './editor/keySpace';
+import { KeySpace, buildKeySpace } from './editor/keySpace';
 import { readSourceText } from './editor/sourceText';
 
 export interface KeyMapOptions {
@@ -28,7 +28,16 @@ export interface KeyMapOptions {
   onError?: (mapPath: string, error: unknown) => void;
 }
 
-export function buildKeyMapForDocument(docFile: string, options: KeyMapOptions): Map<string, string> {
+/**
+ * The whole key space for one document: the key values, each key's resource
+ * target, and the map files they were read from. Diagnostics want the values
+ * and the files (to watch); render paths and completion want the values map.
+ */
+export function buildKeySpaceForDocument(docFile: string, options: KeyMapOptions): KeySpace {
   const maps = collectDitamapFilesUpward(dirname(docFile), options.root, options.nearestOnly ?? true);
-  return buildKeySpace(undefined, maps, readSourceText, options.onError).keys;
+  return buildKeySpace(undefined, maps, readSourceText, options.onError);
+}
+
+export function buildKeyMapForDocument(docFile: string, options: KeyMapOptions): Map<string, string> {
+  return buildKeySpaceForDocument(docFile, options).keys;
 }

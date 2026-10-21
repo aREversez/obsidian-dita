@@ -9,7 +9,8 @@ import { dirname, join, resolve } from 'path';
 import {
   CompletionEnv,
   IMAGE_EXT,
-  buildKeyMapForDocument,
+  KeySpace,
+  buildKeySpaceForDocument,
   collectIds,
   collectReferenceableFiles,
   decodeHrefPart,
@@ -23,6 +24,12 @@ export interface CompletionEnvInput {
   /** Cache lifetime in ms. */
   ttl?: number;
   now?: () => number;
+}
+
+/** CompletionEnv plus what the file watcher needs: which maps the keys came from. */
+export interface PluginCompletionEnv extends CompletionEnv {
+  /** Absolute paths of the ditamaps the key values were read from (see KeySpace.files). */
+  keyFiles(): readonly string[];
 }
 
 const SKIP = new Set(['node_modules', 'out']);
@@ -52,7 +59,7 @@ function collectImages(baseDir: string, maxDepth = 3, maxResults = 200): string[
   return out;
 }
 
-export function createCompletionEnv(input: CompletionEnvInput): CompletionEnv {
+export function createCompletionEnv(input: CompletionEnvInput): PluginCompletionEnv {
   const { absPath, vaultRoot, isMap } = input;
   const ttl = input.ttl ?? 3000;
   const now = input.now ?? Date.now;
@@ -67,16 +74,21 @@ export function createCompletionEnv(input: CompletionEnvInput): CompletionEnv {
     return value;
   }
 
+  // One key space for both the values and the files they came from, so the
+  // watcher and the completion popup can never disagree about which maps count.
+  const keySpace = (): KeySpace =>
+    cached('keys', (): KeySpace => {
+      try {
+        return buildKeySpaceForDocument(absPath, { root: vaultRoot, onError: () => undefined });
+      } catch {
+        return { keys: new Map<string, string>(), defs: new Map(), files: [], status: 'none' };
+      }
+    });
+
   return {
     isMap,
-    keys: () =>
-      cached('keys', () => {
-        try {
-          return buildKeyMapForDocument(absPath, { root: vaultRoot, onError: () => undefined });
-        } catch {
-          return new Map<string, string>();
-        }
-      }),
+    keys: () => keySpace().keys,
+    keyFiles: () => keySpace().files,
     files: (kind) =>
       kind === 'image'
         ? cached('images', () => collectImages(docDir))

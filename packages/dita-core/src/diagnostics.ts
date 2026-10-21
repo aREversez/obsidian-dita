@@ -50,6 +50,21 @@ export interface DiagnosticsInput {
   idsIn?: (absPath: string) => readonly string[] | undefined;
   /** True for a .ditamap. Defaults to the file extension. */
   isMap?: boolean;
+  /**
+   * The ditamaps the key space came from. The check never reads them itself
+   * (it only looks key names up in `keys`), but a host that watches files
+   * needs them too: a key defined or removed in a map changes the answer for
+   * every keyref in this document.
+   */
+  keyFiles?: readonly string[];
+  /**
+   * Absolute paths whose content this result was derived from: every
+   * reference target (existing or missing, so creating it counts as a
+   * change) and every key map. A host re-runs the check when one of them
+   * changes on disk, rather than showing a stale warning until the file is
+   * reopened.
+   */
+  collectDependencies?: Set<string>;
 }
 
 /** A file whose #id anchors can be checked with idsIn. */
@@ -286,6 +301,8 @@ interface CheckState {
   keys: ReadonlyMap<string, string>;
   fileExists: (absPath: string) => boolean;
   idsIn?: (absPath: string) => readonly string[] | undefined;
+  /** Receives every external file the check looked at; see DiagnosticsInput. */
+  deps?: Set<string>;
   /** Ids in this document; #fragments resolve against these. */
   ownIds: Map<string, number>;
   out: DitaDiagnostic[];
@@ -324,6 +341,9 @@ function checkFileRef(state: CheckState, node: DitaNode, attribute: string): voi
   if (!isLocalRef(node, raw)) return;
 
   const target = resolve(state.docDir, decodeHrefPart(pathPart));
+  // Watched even when it does not exist: creating the file is exactly the
+  // fix for "File not found", and must clear the warning without reopening.
+  state.deps?.add(target);
   if (!state.fileExists(target)) {
     report(state, node, `File not found: ${pathPart}`);
     return;
@@ -373,7 +393,11 @@ function checkDuplicateIds(state: CheckState, root: DitaNode): void {
  * document is well formed and every reference it makes can be resolved.
  */
 export function collectDiagnostics(input: DiagnosticsInput): DitaDiagnostic[] {
-  const { xml, absPath, keys, fileExists = existsSync, idsIn } = input;
+  const { xml, absPath, keys, keyFiles, fileExists = existsSync, idsIn, collectDependencies } = input;
+  // Key maps are dependencies whatever the document turns out to contain: a
+  // keyref that resolves today can stop resolving when the map changes, and
+  // no other file is read to find that out.
+  if (collectDependencies) for (const map of keyFiles ?? []) collectDependencies.add(map);
   const wellFormed = checkWellFormed(xml);
   if (wellFormed) return [wellFormed];
 
@@ -401,6 +425,7 @@ export function collectDiagnostics(input: DiagnosticsInput): DitaDiagnostic[] {
     keys: keys ?? new Map(),
     fileExists,
     idsIn,
+    deps: collectDependencies,
     ownIds: idsWithLines(root),
     out: [],
   };
