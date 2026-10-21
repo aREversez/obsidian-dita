@@ -1,6 +1,6 @@
 import { App, Plugin, PluginSettingTab, Setting } from 'obsidian';
 import { DitaSettings, PREVIEW_DELAY_RANGE } from './settings';
-import { MODE_LABELS, VIEW_MODES, parseViewMode } from './viewMode';
+import { MODE_LABELS, TOPIC_MODES, parseViewMode } from './viewMode';
 
 interface SettingsHost {
   settings: DitaSettings;
@@ -20,7 +20,7 @@ export class DitaSettingTab extends PluginSettingTab {
       .setName('Default view mode')
       .setDesc('How a DITA file opens the first time. Each pane then remembers the mode you last chose for it.')
       .addDropdown((dd) => {
-        for (const m of VIEW_MODES) dd.addOption(m, MODE_LABELS[m]);
+        for (const m of TOPIC_MODES) dd.addOption(m, MODE_LABELS[m]);
         dd.setValue(this.host.settings.defaultMode).onChange(async (value) => {
           this.host.settings.defaultMode = parseViewMode(value, this.host.settings.defaultMode);
           await this.host.saveSettings();

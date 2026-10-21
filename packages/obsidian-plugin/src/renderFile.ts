@@ -5,7 +5,7 @@
 // that touches the Obsidian API.)
 
 import { dirname, isAbsolute, relative, resolve, sep } from 'path';
-import { buildKeyMapForDocument, decodeHrefPart, renderMapXml, renderTopicXml } from '@dita-viewer/core';
+import { buildKeyMapForDocument, decodeHrefPart, renderBookXml, renderMapXml, renderTopicXml } from '@dita-viewer/core';
 import { outlineLabel, roleFormatFor } from './roleLabels';
 
 export interface RenderFileInput {
@@ -91,6 +91,41 @@ export function renderDitamapFile(input: RenderMapInput): RenderFileResult {
       collectDependencies: dependencies,
     });
     return { html, dependencies };
+  } catch (e) {
+    return { html: '', error: e instanceof Error ? e.message : String(e), dependencies };
+  }
+}
+
+export interface RenderBookInput extends RenderMapInput {
+  /** Maps a vault-relative path ("img/a.png") to a URL the preview can load. */
+  toResourceUrl: (vaultRelativePath: string) => string;
+}
+
+/** Render a .ditamap as a book: every referenced topic on one page. */
+export function renderBookFile(input: RenderBookInput): RenderFileResult {
+  const { xml, absPath, vaultRoot, toResourceUrl, uiLanguage } = input;
+  const dependencies = new Set<string>([absPath]);
+  try {
+    const keyMap = buildKeyMapForDocument(absPath, {
+      root: vaultRoot,
+      onError: (mapPath, e) => console.warn(`DITA Viewer: could not read keys from ${mapPath}:`, e instanceof Error ? e.message : e),
+    });
+    const result = renderBookXml({
+      xml,
+      docDir: dirname(absPath),
+      keyMap,
+      roleFormat: roleFormatFor(uiLanguage),
+      uiLanguage,
+      // The core resolves each image against its own topic's folder; a path
+      // that climbs out of the vault cannot be served as a vault resource.
+      toResourceUrl: (targetAbsPath) => {
+        const rel = relative(vaultRoot, targetAbsPath);
+        if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return '';
+        return toResourceUrl(rel.split(sep).join('/'));
+      },
+      collectDependencies: dependencies,
+    });
+    return { html: result.html, title: result.title, dependencies };
   } catch (e) {
     return { html: '', error: e instanceof Error ? e.message : String(e), dependencies };
   }

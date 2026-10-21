@@ -1,45 +1,50 @@
 # obsidian-dita
 
 Read and edit DITA topics and maps in Obsidian. `.dita` files open in a
-formatted reading view and `.ditamap` files in an outline tree; both take its colours, fonts and heading style from whichever theme you use.
+formatted reading view and `.ditamap` files in an outline tree or as a whole
+book; both take its colours, fonts and heading style from whichever theme you
+use.
 
 Built on [`@dita-viewer/core`](packages/dita-core), the same rendering engine as
 the [VS Code DITA Viewer](https://github.com/aREversez/VS-Code-DITA-Viewer).
 
 ## Status
 
-**Preview and editing** of `.dita` topics and `.ditamap` outlines, desktop only.
+**Preview and editing** of `.dita` topics and `.ditamap` maps, desktop only.
 
 Works: all topic types and specializations the core renders, `keyref` /
 `conkeyref` against the ditamap near the topic, `conref` / `conrefend`
 (including content from other files, and re-render when those change), images
 inside the vault, MathML, links between topics, light and dark themes, and
-editing the XML source with three view modes (below), tag / attribute / value
+editing the XML source with view modes (below), tag / attribute / value
 completion in the editor, source diagnostics (well-formedness, references to
 nothing, duplicate ids), Ctrl/Cmd+click on a reference to open its target,
 conref "jump to source" in the preview, wrap and insert commands, the
-`.ditamap` outline (below), and a quick switcher for `.dita` / `.ditamap` files.
+`.ditamap` outline and book view (below), and a quick switcher for `.dita` /
+`.ditamap` files.
 
-Not yet: map book and site views, profiling filters, Git compare, DITA-OT.
+Not yet: map site view, profiling filters, Git compare, DITA-OT.
 Mobile is not supported because the core reads files through Node.
 
 ## View modes
 
-A `.dita` file opens in one of three modes, like a Markdown note. Use the
-button in the pane header, the pane's "more options" menu, or a command:
+A `.dita` file opens in one of three modes, like a Markdown note; a `.ditamap`
+has a fourth. Use the button in the pane header, the pane's "more options"
+menu, or a command:
 
 | Mode | What you see |
 | --- | --- |
-| **Reading view** | The formatted topic. |
+| **Reading view** | The formatted topic, or the map outline. |
 | **Source mode** | The XML in an editor: syntax highlighting, line numbers, auto-closing tags and quotes, search, undo history. |
 | **Live preview (side by side)** | Source on the left, preview on the right. The preview updates shortly after you stop typing and keeps the last good render while the XML is invalid (an error bar says what is wrong). Scrolling or moving the caret in the source scrolls the preview to the same place; clicking an element in the preview puts the caret on its source. |
+| **Book view** (maps only) | Every topic the map references, in map order, merged into one reading page with its bookmap chapter/appendix labels. A cross-topic `xref` to another topic in the same book scrolls to that section instead of opening a file. Right-click a section to reveal that topic's source at the clicked line. |
 
 Commands (all under "DITA Viewer:"): *Reading view*, *Source mode*, *Live
-preview (side by side)*, *Toggle reading view and source mode*, *Wrap selection
-in an element*, *Insert a structure*, and *Quick switch to a DITA file*. No
-hotkeys are assigned; set your own under Settings → Hotkeys. Settings has the
-default mode for newly opened files and the live-preview delay. Each pane
-remembers the mode you last chose for it.
+preview (side by side)*, *Book view* (on a map), *Toggle reading view and
+source mode*, *Wrap selection in an element*, *Insert a structure*, and *Quick
+switch to a DITA file*. No hotkeys are assigned; set your own under
+Settings → Hotkeys. Settings has the default mode for newly opened files and
+the live-preview delay. Each pane remembers the mode you last chose for it.
 
 In the source, Ctrl/Cmd+click an `href`, `conref` or `keyref` to open the file
 or key it names; in the preview, click the reuse badge on conref'd content to
@@ -71,13 +76,20 @@ In the source editor, completion pops up as you type:
 
 ## Map outline
 
-A `.ditamap` opens as the same three modes. Reading view shows the outline tree:
+A `.ditamap` opens in the same modes, plus **Book view** (the whole map merged
+into one page, described above). Reading view shows the outline tree:
 navtitles (or the file name when the map does not name an entry), bookmap
 division badges (`第 1 章` / `Chapter 1`, following the Obsidian language),
 nested submaps, key definitions and reltables. Click an entry to open its topic;
-Ctrl/Cmd-click opens it in a new tab. The outline re-renders when a referenced
-submap changes. Side by side, the outline follows your typing; clicking in it
-does not move the source caret (the outline has no source positions).
+Ctrl/Cmd-click opens it in a new tab. Right-click an entry for *Open* and
+*Reveal in source*: the source opens beside the preview, so the outline stays
+in view, with the caret on that `topicref` in the map. An entry pulled in from a
+referenced submap has no line in this map, so it opens that topic's own source
+instead. After a reveal, a Back button appears in the pane header, and the
+right-click menu offers *Back to Reading view* or *Back to Book view* to return
+where you were. The outline re-renders when a referenced submap changes. Side
+by side, the outline follows your typing; clicking in it does not move the
+source caret.
 
 ## Install (manual)
 

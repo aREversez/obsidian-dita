@@ -3,7 +3,7 @@ import { join } from 'path';
 import { DitaView, VIEW_TYPE_DITA } from './DitaView';
 import { DEFAULT_SETTINGS, DitaSettings, SettingsProvider, normalizeSettings } from './settings';
 import { DitaSettingTab } from './settingsTab';
-import { MODE_LABELS, VIEW_MODES } from './viewMode';
+import { MODE_LABELS, VIEW_MODES, modesFor } from './viewMode';
 import { DitaFileSwitcher, SnippetPicker } from './pickers';
 import { STRUCTURES, StructureSpec, WRAPS, WrapSpec } from './snippetsData';
 
@@ -24,7 +24,7 @@ export default class DitaViewerPlugin extends Plugin implements SettingsProvider
         name: MODE_LABELS[mode],
         checkCallback: (checking) => {
           const view = this.app.workspace.getActiveViewOfType(DitaView);
-          if (!view) return false;
+          if (!view || !modesFor(view.isMapFile()).includes(mode)) return false;
           if (!checking) view.setMode(mode);
           return true;
         },

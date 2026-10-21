@@ -31,8 +31,11 @@ harness with its mock of the Obsidian API.
 
 ### Phase 1 — editing
 
-Checked in the browser harness only; still to be checked in Obsidian itself:
-- [ ] diagnostics underlines and gutter dots, Ctrl/Cmd+click navigation, the
+Checked in Obsidian itself: diagnostics underlines and gutter dots,
+Ctrl/Cmd+click navigation, the conref badge, the wrap / insert commands and
+the quick switcher.
+
+- [x] Diagnostics underlines and gutter dots, Ctrl/Cmd+click navigation, the
       conref badge, the wrap / insert commands and the quick switcher.
 
 1. [x] Diagnostics in the source editor: XML well-formedness with line
@@ -45,8 +48,8 @@ Checked in the browser harness only; still to be checked in Obsidian itself:
 
 ### Phase 2 — maps
 
-1. [ ] Outline context menu (open, reveal in source).
-2. [ ] Book view (whole map merged into one page).
+1. [x] Outline context menu (open, reveal in source).
+2. [x] Book view (whole map merged into one page).
 3. [ ] Site view: only after book view is stable, and only if wanted.
 
 ### Phase 3 — conditional processing
@@ -78,8 +81,7 @@ Checked in the browser harness only; still to be checked in Obsidian itself:
 
 - Work on the `dev` branch. Deliver changes as one git-format patch
   (`git format-patch --stdout origin/dev..HEAD`) with commit messages.
-- Author and committer: `aREversez <53844261+aREversez@users.noreply.github.com>`.
-  Commit messages carry no co-author, session or tool trailers, and no mention
+- Commit messages carry no co-author, session or tool trailers, and no mention
   of the tool that wrote the change.
 - Prefer small, surgical edits that keep existing wording and structure.
 - The verbatim files in `packages/dita-core` (`src/parser/`, `src/render/`,

@@ -1,4 +1,4 @@
-import { ViewMode, parseViewMode } from './viewMode';
+import { TOPIC_MODES, ViewMode, parseViewMode } from './viewMode';
 
 export interface DitaSettings {
   /** Mode a .dita file opens in when the pane has no saved mode of its own. */
@@ -20,8 +20,10 @@ export function normalizeSettings(raw: unknown): DitaSettings {
   const delay = typeof r.previewDelayMs === 'number' && Number.isFinite(r.previewDelayMs)
     ? Math.round(r.previewDelayMs)
     : DEFAULT_SETTINGS.previewDelayMs;
+  const mode = parseViewMode(r.defaultMode, DEFAULT_SETTINGS.defaultMode);
   return {
-    defaultMode: parseViewMode(r.defaultMode, DEFAULT_SETTINGS.defaultMode),
+    // The default applies to topics too, which have no book view.
+    defaultMode: (TOPIC_MODES as readonly string[]).includes(mode) ? mode : DEFAULT_SETTINGS.defaultMode,
     previewDelayMs: Math.min(PREVIEW_DELAY_RANGE.max, Math.max(PREVIEW_DELAY_RANGE.min, delay)),
   };
 }

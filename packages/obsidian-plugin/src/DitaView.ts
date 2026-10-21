@@ -3,9 +3,9 @@ import { dirname, isAbsolute, join, relative, resolve } from 'path';
 import coreCss from '../../dita-core/styles/dita-content.css';
 import adapterCss from './theme/obsidian-adapter.css';
 import { collectDiagnostics, decodeHrefPart, getKeyDefs, splitRefFragment } from '@dita-viewer/core';
-import { renderDitaFile, renderDitamapFile } from './renderFile';
+import { renderBookFile, renderDitaFile, renderDitamapFile } from './renderFile';
 import { SettingsProvider } from './settings';
-import { MODE_ICONS, MODE_LABELS, VIEW_MODES, ViewMode, panesFor, parseViewMode, toggleMode } from './viewMode';
+import { MODE_ICONS, MODE_LABELS, ViewMode, modesFor, panesFor, parseViewMode, toggleMode } from './viewMode';
 import { SourceEditor, createSourceEditor } from './sourceEditor';
 import { createCompletionEnv } from './completionEnv';
 import { ditaCompletionSource } from './completionSource';
@@ -15,6 +15,7 @@ import { ProblemRange, problemRanges } from './sourceDiagnostics';
 import { SourceReference, positionOfId } from './references';
 import { createIdReader } from './fileIds';
 import { badgeBox, badgeHit, conrefKindOf } from './conrefJump';
+import { outlineEntryPosition } from './mapOutline';
 import { StructureSpec, WrapSpec } from './snippetsData';
 import { insertStructure, wrapSelection } from './snippets';
 
@@ -60,7 +61,8 @@ function fragmentOf(href: string): string {
 }
 
 /**
- * Reading view, source editor and side-by-side live preview for a .dita file.
+ * Reading view, source editor, side-by-side live preview and the map book
+ * view for DITA topics and maps.
  *
  * Reading view and the preview pane render the topic inside a Shadow DOM.
  * Obsidian theme selectors (which target things like `table`, `code`, `a`
@@ -84,6 +86,8 @@ export class DitaView extends TextFileView {
   private body!: HTMLElement;
   private editor!: SourceEditor;
   private modeAction!: HTMLElement;
+  /** Shown only while a reveal has a view to go back to. */
+  private backAction!: HTMLElement;
 
   private dependencies = new Set<string>();
   /** Files the last diagnostics run read (reference targets, key maps). */
@@ -98,6 +102,8 @@ export class DitaView extends TextFileView {
   private readonly idReader = createIdReader();
   /** A reveal requested through setEphemeralState, applied once the text is loaded. */
   private pendingReveal?: { line?: number; col?: number; id?: string };
+  /** The view to offer as "Back" after a reveal switched this pane to split. */
+  private revealReturnMode?: ViewMode;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: SettingsProvider) {
     super(leaf);
@@ -111,6 +117,11 @@ export class DitaView extends TextFileView {
 
   getDisplayText(): string {
     return this.file?.basename ?? 'DITA';
+  }
+
+  /** True for a .ditamap, the only file that has a book view. */
+  isMapFile(): boolean {
+    return this.file?.extension.toLowerCase() === 'ditamap';
   }
 
   getIcon(): string {
@@ -157,6 +168,8 @@ export class DitaView extends TextFileView {
       onReference: (ref, evt) => this.openReference(ref, evt),
     });
 
+    this.backAction = this.addAction('arrow-left', 'Back to the previous view', () => this.goBack());
+    this.backAction.style.display = 'none';
     this.modeAction = this.addAction(MODE_ICONS[this.mode], 'View mode', (evt) => this.showModeMenu(evt));
     this.updateScheme();
     this.applyMode();
@@ -193,6 +206,12 @@ export class DitaView extends TextFileView {
 
   setViewData(data: string, clear: boolean): void {
     this.data = data;
+    // A leaf can be re-used for another file: a topic has no book view.
+    if (this.file && this.mode === 'book' && !this.isMapFile()) {
+      this.mode = 'reading';
+      this.revealReturnMode = undefined;
+      if (this.container) this.applyMode();
+    }
     this.scheduleRender.cancel();
     if (!this.editor) return; // onOpen has not run yet; it seeds the editor from this.data
     this.editor.load(data, clear);
@@ -205,6 +224,8 @@ export class DitaView extends TextFileView {
   clear(): void {
     this.data = '';
     this.pendingReveal = undefined;
+    this.revealReturnMode = undefined;
+    this.updateBackAction();
     this.scheduleRender.cancel();
     this.editor?.load('', true);
     this.body?.replaceChildren();
@@ -222,6 +243,14 @@ export class DitaView extends TextFileView {
 
   setMode(mode: ViewMode): void {
     if (mode === this.mode) return;
+    // Book view merges a whole map; never put a single topic in it.
+    if (mode === 'book' && !this.isMapFile()) return;
+    // Reading and split show the map outline; book shows the merged topics.
+    // Crossing that boundary needs a re-render even when the source is unchanged.
+    if ((mode === 'book') !== (this.mode === 'book')) this.previewStale = true;
+    // Any deliberate mode change ends the "Back to ..." offer; showSource
+    // records a new one after switching to split.
+    this.revealReturnMode = undefined;
     this.mode = mode;
     this.applyMode();
     this.app.workspace.requestSaveLayout();
@@ -256,17 +285,30 @@ export class DitaView extends TextFileView {
   onPaneMenu(menu: Menu, source: string): void {
     super.onPaneMenu(menu, source);
     menu.addSeparator();
-    for (const m of VIEW_MODES) {
-      menu.addItem((item) => item.setTitle(MODE_LABELS[m]).setIcon(MODE_ICONS[m]).setChecked(m === this.mode).onClick(() => this.setMode(m)));
-    }
+    this.addModeItems(menu);
   }
 
   private showModeMenu(evt: MouseEvent): void {
     const menu = new Menu();
-    for (const m of VIEW_MODES) {
+    this.addModeItems(menu);
+    menu.showAtMouseEvent(evt);
+  }
+
+  /** The mode list, prefixed by "Back to ..." after a reveal changed the view. */
+  private addModeItems(menu: Menu): void {
+    const back = this.revealReturnMode;
+    if (back && back !== this.mode) {
+      menu.addItem((item) =>
+        item
+          .setTitle(`Back to ${MODE_LABELS[back]}`)
+          .setIcon('arrow-left')
+          .onClick(() => this.setMode(back)),
+      );
+      menu.addSeparator();
+    }
+    for (const m of modesFor(this.isMapFile())) {
       menu.addItem((item) => item.setTitle(MODE_LABELS[m]).setIcon(MODE_ICONS[m]).setChecked(m === this.mode).onClick(() => this.setMode(m)));
     }
-    menu.showAtMouseEvent(evt);
   }
 
   private applyMode(): void {
@@ -274,6 +316,7 @@ export class DitaView extends TextFileView {
     this.container.dataset.mode = this.mode;
     setIcon(this.modeAction, MODE_ICONS[this.mode]);
     this.modeAction.setAttribute('aria-label', MODE_LABELS[this.mode]);
+    this.updateBackAction();
     // Typing while only the source was showing left the preview behind.
     if (panes.preview && this.previewStale && this.file) void this.render();
     if (panes.editor) {
@@ -283,6 +326,20 @@ export class DitaView extends TextFileView {
         if (this.mode === 'split') this.syncPreviewToEditor();
       });
     }
+  }
+
+  /** Return to the view a reveal replaced, if there is one. */
+  private goBack(): void {
+    if (this.revealReturnMode) this.setMode(this.revealReturnMode);
+  }
+
+  /** Show the header Back button and name its destination. */
+  private updateBackAction(): void {
+    if (!this.backAction) return;
+    const back = this.revealReturnMode;
+    const show = back !== undefined && back !== this.mode;
+    this.backAction.style.display = show ? '' : 'none';
+    if (show) this.backAction.setAttribute('aria-label', `Back to ${MODE_LABELS[back]}`);
   }
 
   // ── editing ──
@@ -404,15 +461,23 @@ export class DitaView extends TextFileView {
     const scrollTop = this.scroller.scrollTop;
 
     const result =
-      file.extension.toLowerCase() === 'ditamap'
-        ? renderDitamapFile({ xml: this.data, absPath, vaultRoot, uiLanguage: moment.locale() })
-        : renderDitaFile({
+      this.isMapFile() && this.mode === 'book'
+        ? renderBookFile({
             xml: this.data,
             absPath,
             vaultRoot,
             toResourceUrl: (rel) => adapter.getResourcePath(normalizePath(rel)),
             uiLanguage: moment.locale(),
-          });
+          })
+        : this.isMapFile()
+          ? renderDitamapFile({ xml: this.data, absPath, vaultRoot, uiLanguage: moment.locale() })
+          : renderDitaFile({
+              xml: this.data,
+              absPath,
+              vaultRoot,
+              toResourceUrl: (rel) => adapter.getResourcePath(normalizePath(rel)),
+              uiLanguage: moment.locale(),
+            });
     this.dependencies = result.dependencies;
 
     if (result.error !== undefined) {
@@ -520,11 +585,101 @@ export class DitaView extends TextFileView {
 
   private onContextMenu(evt: MouseEvent): void {
     evt.preventDefault();
+    const target = evt.target as Element | null;
+    const entry = target?.closest('a.map-tree-link[data-href]');
+    const bookSection = this.mode === 'book' ? target?.closest('[data-dita-book-file]') : null;
     const hasSelection = (this.previewSelection()?.toString() ?? '') !== '';
     const menu = new Menu();
+    // After "Reveal in source" the reader can come back from the same menu
+    // they right-clicked in, not only from the header button.
+    const back = this.revealReturnMode;
+    if (back && back !== this.mode) {
+      menu.addItem((item) =>
+        item
+          .setTitle(`Back to ${MODE_LABELS[back]}`)
+          .setIcon('arrow-left')
+          .onClick(() => this.goBack()),
+      );
+      menu.addSeparator();
+    }
+    if (entry) {
+      const href = entry.getAttribute('data-href') ?? '';
+      menu.addItem((item) =>
+        item.setTitle('Open').setIcon('file-text').onClick(() => this.openRelative(href)),
+      );
+      menu.addItem((item) =>
+        item.setTitle('Reveal in source').setIcon('code').onClick(() => this.revealOutlineEntry(href)),
+      );
+      menu.addSeparator();
+    } else if (bookSection) {
+      // Book view has no outline rows; reveal the topic the reader right-clicked.
+      menu.addItem((item) =>
+        item
+          .setTitle('Reveal in source')
+          .setIcon('code')
+          .onClick(() => this.revealBookSection(bookSection, target)),
+      );
+      menu.addSeparator();
+    }
     menu.addItem((item) => item.setTitle('Copy').setIcon('copy').setDisabled(!hasSelection).onClick(() => void this.copySelection()));
     menu.addItem((item) => item.setTitle('Select all').setIcon('text-select').onClick(() => this.selectAllInPreview()));
     menu.showAtMouseEvent(evt);
+  }
+
+  /**
+   * "Reveal in source" for an outline row: put the caret on the topicref in
+   * this map. Rows spliced in from a referenced submap have no line in this
+   * text, so those open the topic they name in the source instead.
+   */
+  private revealOutlineEntry(href: string): void {
+    const pos = outlineEntryPosition(this.getViewData(), href);
+    if (pos) {
+      this.showSource(pos.line, pos.col);
+      return;
+    }
+    if (!this.file || !href || href.startsWith('#')) return;
+    const target = this.app.vault.getAbstractFileByPath(
+      normalizePath(join(dirname(this.file.path), decodeHrefPart(href.split('#')[0]))),
+    );
+    if (target instanceof TFile) {
+      void this.app.workspace.getLeaf(false).openFile(target, { eState: { ditaLine: 0, ditaCol: 0 } });
+      return;
+    }
+    new Notice('The topic for this outline entry was not found.');
+  }
+
+  /**
+   * "Reveal in source" inside book view: open the topic in a split beside the
+   * book, at the line of the element that was right-clicked. Book view has no
+   * outline rows, so the clicked section is the target.
+   */
+  private revealBookSection(section: Element, target: Element | null): void {
+    const abs = section.getAttribute('data-dita-book-file');
+    const vaultRoot = this.vaultRoot();
+    if (!abs || !vaultRoot) return;
+    const rel = relative(vaultRoot, abs);
+    if (rel.startsWith('..') || isAbsolute(rel)) {
+      new Notice('The topic is outside the vault.');
+      return;
+    }
+    const file = this.app.vault.getAbstractFileByPath(normalizePath(rel));
+    if (!(file instanceof TFile)) {
+      new Notice(`File not found: ${rel}`);
+      return;
+    }
+    const nearest = target?.closest('[data-line]');
+    const lineEl = (nearest && section.contains(nearest) ? nearest : section.querySelector('[data-line]')) as Element | null;
+    const line = lineEl ? Number(lineEl.getAttribute('data-line')) : 0;
+    const col = lineEl ? Number(lineEl.getAttribute('data-start-col') ?? 0) : 0;
+    const leaf = this.app.workspace.getLeaf('split', 'vertical');
+    const eState = {
+      ditaLine: Number.isFinite(line) ? line : 0,
+      ditaCol: Number.isFinite(col) ? col : 0,
+    };
+    void leaf.openFile(file, { eState }).then(() => {
+      // The book stays on the other side; show only the topic source here.
+      if (leaf.view instanceof DitaView) leaf.view.setMode('source');
+    });
   }
 
   private onClick(evt: MouseEvent): void {
@@ -544,6 +699,14 @@ export class DitaView extends TextFileView {
       this.openRelative(entry.getAttribute('data-href') ?? '', evt);
       return;
     }
+    // A cross-file xref inside the book: the target is another topic that is
+    // already on the page, so scroll to its section instead of opening a file.
+    const bookRef = (evt.target as Element | null)?.closest('[data-dita-book-xref]');
+    if (bookRef) {
+      evt.preventDefault();
+      this.jumpInBook(bookRef.getAttribute('data-dita-book-xref') ?? '');
+      return;
+    }
     const a = (evt.target as Element | null)?.closest('a[href]');
     if (!a || !this.file) {
       this.jumpToSource(evt);
@@ -560,17 +723,51 @@ export class DitaView extends TextFileView {
       this.shadow.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView({ block: 'start' });
       return;
     }
-    this.openRelative(href, evt);
+    // A plain link inside a book topic is relative to that topic, not to the
+    // map; the section says which topic it is.
+    const section = a.closest('[data-dita-book-file]');
+    this.openRelative(href, evt, section?.getAttribute('data-dita-book-file') ?? undefined);
   }
 
-  /** Open a file named by a path relative to this document, in a new tab when Ctrl/Cmd is held. */
-  private openRelative(href: string, evt: MouseEvent): void {
-    if (!this.file) return;
+  /**
+   * Open a file named by a path relative to this document, in a new tab when
+   * Ctrl/Cmd is held. `baseAbsPath` overrides the base (a book topic, whose
+   * links are relative to the topic file rather than to the map).
+   */
+  private openRelative(href: string, evt?: MouseEvent, baseAbsPath?: string): void {
+    const vaultRoot = this.vaultRoot();
+    if (!vaultRoot || !this.file) return;
     const [path] = href.split('#');
-    const target = this.app.vault.getAbstractFileByPath(normalizePath(join(dirname(this.file.path), decodeURIComponent(path))));
+    const baseDir = baseAbsPath ? dirname(baseAbsPath) : resolve(vaultRoot, dirname(this.file.path));
+    const rel = relative(vaultRoot, resolve(baseDir, decodeHrefPart(path)));
+    if (rel.startsWith('..') || isAbsolute(rel)) return;
+    const target = this.app.vault.getAbstractFileByPath(normalizePath(rel));
     if (target instanceof TFile) {
-      void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(target);
+      void this.app.workspace.getLeaf(evt ? Keymap.isModEvent(evt) : false).openFile(target);
     }
+  }
+
+  /**
+   * Follow a cross-file xref rendered inside the book: scroll to the topic
+   * section whose data-dita-book-file matches, then to the element id in it.
+   * The link is only rendered for book members, so a miss means the page is
+   * stale (the map changed since this HTML was made) -- open the topic.
+   */
+  private jumpInBook(target: string): void {
+    if (!target) return;
+    const hash = target.indexOf('#');
+    const file = hash < 0 ? target : target.slice(0, hash);
+    const id = hash < 0 ? '' : decodeHrefPart(target.slice(hash + 1));
+    let section: Element | undefined;
+    this.shadow.querySelectorAll('[data-dita-book-file]').forEach((el) => {
+      if (!section && el.getAttribute('data-dita-book-file') === file) section = el;
+    });
+    if (!section) {
+      if (file) this.openSource(file, {});
+      return;
+    }
+    const anchor = id ? Array.from(section.querySelectorAll('[id]')).find((el) => el.id === id) : undefined;
+    (anchor ?? section).scrollIntoView({ block: 'start' });
   }
 
   /** Side by side, clicking the preview puts the caret at that element's source. */
@@ -673,7 +870,13 @@ export class DitaView extends TextFileView {
   /** Bring a source position into view, opening the editor pane when only the preview was showing. */
   private showSource(line: number, col: number): void {
     const visible = panesFor(this.mode).editor;
-    if (!visible) this.setMode('split');
+    const previous = this.mode;
+    if (!visible) {
+      this.setMode('split');
+      // Keep a way back to the outline or book the reader came from.
+      this.revealReturnMode = previous;
+      this.updateBackAction();
+    }
     // Revealing scrolls the editor; without this the echo would scroll the preview back.
     this.quietUntil = performance.now() + SYNC_QUIET_MS;
     const reveal = () => {

@@ -1,26 +1,36 @@
 import { strict as assert } from 'assert';
-import { MODE_ICONS, MODE_LABELS, VIEW_MODES, panesFor, parseViewMode, toggleMode } from '../src/viewMode';
+import { MODE_ICONS, MODE_LABELS, TOPIC_MODES, VIEW_MODES, modesFor, panesFor, parseViewMode, toggleMode } from '../src/viewMode';
 import { DEFAULT_SETTINGS, normalizeSettings } from '../src/settings';
 
 describe('view modes', () => {
   it('parses known modes and falls back for anything else', () => {
     assert.equal(parseViewMode('source', 'reading'), 'source');
     assert.equal(parseViewMode('split', 'reading'), 'split');
+    assert.equal(parseViewMode('book', 'reading'), 'book');
     for (const bad of [undefined, null, 'edit', '', 3, {}, 'READING']) {
       assert.equal(parseViewMode(bad, 'reading'), 'reading');
     }
   });
 
-  it('toggle goes reading -> source, and source or split -> reading', () => {
+  it('offers book view only for maps', () => {
+    assert.deepEqual(modesFor(true), VIEW_MODES);
+    assert.deepEqual(modesFor(false), TOPIC_MODES);
+    assert.ok(VIEW_MODES.includes('book'));
+    assert.equal(TOPIC_MODES.includes('book'), false);
+  });
+
+  it('toggle goes reading -> source, and source, split or book -> reading', () => {
     assert.equal(toggleMode('reading'), 'source');
     assert.equal(toggleMode('source'), 'reading');
     assert.equal(toggleMode('split'), 'reading');
+    assert.equal(toggleMode('book'), 'reading');
   });
 
   it('shows the editor and/or preview per mode', () => {
     assert.deepEqual(panesFor('reading'), { editor: false, preview: true });
     assert.deepEqual(panesFor('source'), { editor: true, preview: false });
     assert.deepEqual(panesFor('split'), { editor: true, preview: true });
+    assert.deepEqual(panesFor('book'), { editor: false, preview: true });
   });
 
   it('every mode has a label and an icon', () => {
@@ -45,5 +55,9 @@ describe('settings', () => {
     assert.equal(normalizeSettings({ previewDelayMs: 999999 }).previewDelayMs, 2000);
     assert.equal(normalizeSettings({ previewDelayMs: NaN }).previewDelayMs, DEFAULT_SETTINGS.previewDelayMs);
     assert.equal(normalizeSettings({ previewDelayMs: 250.6 }).previewDelayMs, 251);
+  });
+
+  it('does not make book view the default for topics', () => {
+    assert.equal(normalizeSettings({ defaultMode: 'book' }).defaultMode, DEFAULT_SETTINGS.defaultMode);
   });
 });

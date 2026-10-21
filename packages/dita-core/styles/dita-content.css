@@ -945,6 +945,58 @@ section, .example { margin: 1.5rem 0; }
   opacity: 0.75;
 }
 
+/* ── Book view: a whole .ditamap's topics on one page ── */
+
+.dita-book {
+  padding: 0 0.5rem;
+}
+
+.dita-book-titlepage {
+  margin: 0 0 2rem 0;
+}
+
+.dita-book-title {
+  margin: 0;
+  font-size: 1.9em;
+  font-weight: 600;
+}
+
+.dita-book-topic {
+  margin: 0 0 2.5rem 0;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--dita-border, currentColor);
+}
+
+.dita-book-topic:last-child {
+  border-bottom: none;
+}
+
+/* BookMap division label above a topic's own title ("Chapter 1", "第 1 章"). */
+.dita-book-role {
+  margin: 0 0 0.35rem 0;
+  font-size: 0.78em;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--dita-fg-muted, inherit);
+}
+
+.dita-book-division {
+  margin: 2.5rem 0 1rem 0;
+}
+
+.dita-book-division-title {
+  margin: 0;
+}
+
+.dita-book-missing,
+.dita-book-error {
+  margin: 1rem 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--dita-border, currentColor);
+  color: var(--dita-fg-muted, inherit);
+}
+
 .map-tree {
   list-style: none;
   padding-left: 1.2em;

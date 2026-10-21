@@ -20,8 +20,14 @@ export { collectReferenceableFiles, toRelativeHref } from './language/referencea
 export type { ReadDir, WalkEntry } from './language/referenceableFiles';
 export { IMAGE_EXT } from './completionData';
 export { collectIds, splitRefFragment } from './language/ditaLanguageUtils';
+export { collectRefEntries, offsetToLineCol } from './language/ditaLanguageUtils';
+export type { RefEntry } from './language/ditaLanguageUtils';
 export { renderMapXml } from './mapRender';
 export type { MapXmlRenderInput } from './mapRender';
+export { renderBookXml } from './bookRender';
+export type { BookXmlRenderInput, BookXmlRenderResult } from './bookRender';
+export { collectMapEntries, getMapTitleText } from './render/mapTypeMap';
+export type { MapEntry } from './render/mapTypeMap';
 export type { RoleLabelFormatter, RoleLabelInfo } from './render/mapTypeMap';
 export type { KeyMapOptions } from './keyMapForDocument';
 

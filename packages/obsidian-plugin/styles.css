@@ -42,6 +42,7 @@
 /* Which panes show, by mode. The editor stays mounted while hidden so its
    undo history and scroll position survive a mode change. */
 .dita-container[data-mode="reading"] .dita-source,
+.dita-container[data-mode="book"] .dita-source,
 .dita-container[data-mode="source"] .dita-scroller {
   display: none;
 }
