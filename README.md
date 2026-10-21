@@ -127,6 +127,8 @@ The archetypes are *shapes* of themes, not copies of real ones; checking a
 specific theme (Minimal, Things, AnuPpuccin, Sanctum, …) still needs a look in
 Obsidian itself.
 
+See [ROADMAP.md](ROADMAP.md) for what is planned next and the working rules.
+
 ## Layout
 
 ```
