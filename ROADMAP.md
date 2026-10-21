@@ -31,10 +31,14 @@ harness with its mock of the Obsidian API.
 
 ### Phase 1 — editing
 
+Checked in the browser harness only; still to be checked in Obsidian itself:
+- [ ] diagnostics underlines and gutter dots, Ctrl/Cmd+click navigation, the
+      conref badge, the wrap / insert commands and the quick switcher.
+
 1. [x] Diagnostics in the source editor: XML well-formedness with line
        positions; `href` / `conref` / `keyref` pointing at nothing; duplicate ids.
 2. [x] Ctrl/Cmd+click in the source on `href`, `conref`, `keyref` opens the target.
-3. [x] Preview: conref "jump to source" (currently `markConrefs: false`).
+3. [x] Preview: conref "jump to source" (the reuse badge on conref'd content).
 4. [x] Commands: wrap the selection (`<b>`, `<codeph>`, ...), insert common
        structures (step, note, table skeleton).
 5. [x] Quick switcher entry for `.dita` / `.ditamap` files.

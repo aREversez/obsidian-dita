@@ -14,7 +14,7 @@ import { existsSync } from 'fs';
 import { dirname, isAbsolute, resolve } from 'path';
 import sax from 'sax';
 import { DitaNode } from './parser/domTypes';
-import { parseDita, parseDitamap, preprocessEntities } from './parser/ditaParser';
+import { parseDita, parseDitamap } from './parser/ditaParser';
 import { decodeHrefPart } from './editor/refResolvers';
 
 export type DiagnosticSeverity = 'error' | 'warning';
@@ -158,13 +158,33 @@ function blankDoctype(xml: string): string {
   return xml.slice(0, start) + blanked + xml.slice(i);
 }
 
+/** CDATA and comments are skipped; what is left is a named entity reference. */
+const CDATA_COMMENT_OR_ENTITY = /(<!\[CDATA\[[\s\S]*?\]\]>|<!--[\s\S]*?-->)|&([A-Za-z_][\w.-]*);/g;
+const XML_BUILTIN = new Set(['amp', 'lt', 'gt', 'quot', 'apos']);
+
+/**
+ * Makes a DITA source parseable without changing where anything is.
+ *
+ * DITA sources use `&nbsp;` and friends with no DTD loaded to declare them, so
+ * a strict XML parser would stop at the first one. preprocessEntities (the
+ * renderer's answer) swaps each for its character, which is right for
+ * rendering but moves every later column on that line: an underline placed by
+ * the parser's position would land on the wrong tag. Here each named
+ * reference becomes the same number of spaces instead, so line and column
+ * still match the editor. The result is only ever parsed, never shown.
+ */
+function parseableSource(xml: string): string {
+  return blankDoctype(xml).replace(CDATA_COMMENT_OR_ENTITY, (full: string, verbatim: string | undefined, name: string) =>
+    verbatim !== undefined || XML_BUILTIN.has(name) ? full : ' '.repeat(full.length),
+  );
+}
+
 /**
  * The first XML error, with the tag it belongs to underlined where one can be
- * found. Entity references are resolved first, because DITA sources use `&nbsp;`
- * and friends without a DTD whose declarations would make them legal.
+ * found.
  */
 function checkWellFormed(xml: string): DitaDiagnostic | undefined {
-  const source = preprocessEntities(blankDoctype(xml));
+  const source = parseableSource(xml);
   const parser = sax.parser(true, { trim: false, normalize: false });
   let failure: { line: number; column: number; message: string } | undefined;
   parser.onerror = (err) => {
@@ -239,8 +259,6 @@ interface CheckState {
   idsIn?: (absPath: string) => readonly string[] | undefined;
   /** Ids in this document; #fragments resolve against these. */
   ownIds: Map<string, number>;
-  /** How many times each id has been reached, for duplicate detection. */
-  seenIds: Map<string, number>;
   out: DitaDiagnostic[];
 }
 
@@ -248,9 +266,14 @@ function report(state: CheckState, node: DitaNode, message: string): void {
   state.out.push({ severity: 'warning', message, ...openingTagRange(state.text, state.starts, node) });
 }
 
-/** True when the href names a file this vault can open: no scheme, no absolute path, not marked external. */
+/**
+ * True when the href names a file this vault can open: no scheme, no absolute
+ * path, and not marked external or peer (a peer is in another deliverable, so
+ * it need not exist next to this file).
+ */
 function isLocalRef(node: DitaNode, value: string): boolean {
-  if (node.attributes?.scope === 'external') return false;
+  const scope = node.attributes?.scope;
+  if (scope === 'external' || scope === 'peer') return false;
   if (URL_SCHEME.test(value) || isAbsolute(value)) return false;
   return true;
 }
@@ -289,22 +312,34 @@ function checkKeyRef(state: CheckState, node: DitaNode, attribute: string): void
   const raw = (node.attributes?.[attribute] ?? '').trim();
   if (!raw) return;
   const name = keyNameOf(raw);
+  // No key space at all means no map was found near the document, not that
+  // every key is missing: a topic opened on its own would otherwise warn on
+  // each keyref it has.
+  if (state.keys.size === 0) return;
   if (name && !state.keys.has(name)) {
     report(state, node, `Key "${name}" is not defined by the maps near this document`);
   }
 }
 
-function checkDuplicateId(state: CheckState, node: DitaNode): void {
-  const id = node.attributes?.id;
-  if (!id) return;
-  const seen = state.seenIds.get(id) ?? 0;
-  state.seenIds.set(id, seen + 1);
-  // The first use is the definition; every later one is the mistake. Counted
-  // rather than compared by position so two tags on one line still clash.
-  if (seen > 0) {
-    const first = state.ownIds.get(id);
-    report(state, node, `Duplicate id "${id}"; first used on line ${(first ?? node.sourceRange.startLine) + 1}`);
-  }
+/**
+ * Duplicate ids, within each topic. DITA only requires an id to be unique in
+ * its own topic, so the same id in a nested topic is legal; a topic's own id
+ * belongs to the scope it sits in. A map has no topics and is one scope.
+ */
+function checkDuplicateIds(state: CheckState, root: DitaNode): void {
+  const visit = (node: DitaNode, scope: Map<string, number>): void => {
+    const id = node.attributes?.id;
+    if (id) {
+      const first = scope.get(id);
+      // The first use is the definition; every later one is the mistake.
+      // Tracked per id rather than by position so two tags on one line clash.
+      if (first === undefined) scope.set(id, node.sourceRange.startLine);
+      else report(state, node, `Duplicate id "${id}"; first used on line ${first + 1}`);
+    }
+    const inner = node.baseType === 'topic/topic' ? new Map<string, number>() : scope;
+    for (const child of elementChildren(node)) visit(child, inner);
+  };
+  visit(root, new Map());
 }
 
 /**
@@ -319,7 +354,7 @@ export function collectDiagnostics(input: DiagnosticsInput): DitaDiagnostic[] {
   const isMap = input.isMap ?? /\.ditamap$/i.test(absPath);
   let root: DitaNode;
   try {
-    root = (isMap ? parseDitamap : parseDita)(preprocessEntities(blankDoctype(xml))).root;
+    root = (isMap ? parseDitamap : parseDita)(parseableSource(xml)).root;
   } catch (e) {
     // Well-formed, but not something the renderer can walk (an empty root,
     // say). Report it at the top rather than pretending the file is clean.
@@ -341,12 +376,11 @@ export function collectDiagnostics(input: DiagnosticsInput): DitaDiagnostic[] {
     fileExists,
     idsIn,
     ownIds: idsWithLines(root),
-    seenIds: new Map(),
     out: [],
   };
 
+  checkDuplicateIds(state, root);
   walk(root, (node) => {
-    checkDuplicateId(state, node);
     for (const attribute of KEY_ATTRIBUTES) checkKeyRef(state, node, attribute);
     // keyref wins over href when both are present (DITA's indirect-first
     // rule), so a co-located href is a fallback and not worth a warning.

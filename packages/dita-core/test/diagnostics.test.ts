@@ -67,6 +67,19 @@ describe('diagnostics: duplicate ids', () => {
     const xml = '<topic><p id="a"/><p id="a"/></topic>';
     assert.deepEqual(diag(xml).map((d) => d.startCol), [18]);
   });
+
+  it('lets a nested topic reuse ids: an id is unique within its own topic', () => {
+    const xml = '<concept id="c"><title>T</title><conbody><p id="x">a</p></conbody>'
+      + '<concept id="d"><title>U</title><conbody><p id="x">b</p></conbody></concept></concept>';
+    assert.deepEqual(messages(xml), []);
+  });
+
+  it('still catches a repeat inside the nested topic, and a repeated topic id', () => {
+    const inner = '<concept id="d"><title>U</title><conbody><p id="y"/><p id="y"/></conbody></concept>';
+    assert.deepEqual(messages(`<concept id="c"><title>T</title>${inner}</concept>`), ['Duplicate id "y"; first used on line 1']);
+    const twins = '<concept id="c"><title>T</title><concept id="d"><title>U</title></concept><concept id="d"><title>V</title></concept></concept>';
+    assert.deepEqual(messages(twins), ['Duplicate id "d"; first used on line 1']);
+  });
 });
 
 describe('diagnostics: own-document anchors', () => {
@@ -101,6 +114,11 @@ describe('diagnostics: files', () => {
       + '<xref href="/etc/hosts">c</xref>'
       + '<xref href="www.example.com" scope="external">d</xref>'
       + '</p></topic>';
+    assert.deepEqual(messages(xml, { fileExists: () => false }), []);
+  });
+
+  it('does not require a peer target to exist next to this file', () => {
+    const xml = '<topic><title>x</title><p><xref href="other.dita" scope="peer">a</xref></p></topic>';
     assert.deepEqual(messages(xml, { fileExists: () => false }), []);
   });
 
@@ -159,16 +177,41 @@ describe('diagnostics: keys', () => {
     ]);
   });
 
+  it('has nothing to check against when no key space was found, so it stays quiet', () => {
+    const xml = '<topic><title>x</title><p><ph keyref="brand">a</ph><ph conkeyref="brand/n">b</ph></p></topic>';
+    assert.deepEqual(messages(xml), []);
+    assert.deepEqual(messages(xml, { keys: new Map() }), []);
+  });
+
   it('does not also report the href that a keyref overrides', () => {
     const xml = '<topic><title>x</title><p><xref keyref="product" href="missing.dita">a</xref></p></topic>';
     assert.deepEqual(messages(xml, { keys, fileExists: () => false }), []);
   });
 });
 
+describe('diagnostics: positions with named entities', () => {
+  it('puts an XML error on the right tag when entities come before it on the line', () => {
+    const xml = '<concept id="c"><title>A&nbsp;&nbsp;&nbsp;B&mdash;C</title><conbody><p>x</q></conbody></concept>';
+    const [d] = diag(xml);
+    assert.equal(d.severity, 'error');
+    assert.equal(xml.slice(d.startCol, d.endCol), '</q>');
+  });
+
+  it('puts a warning on the right tag when entities come before it on the line', () => {
+    const xml = '<topic><title>A&nbsp;B</title><p>&copy; <xref href="gone.dita">x</xref></p></topic>';
+    const [d] = diag(xml, { fileExists: () => false });
+    assert.equal(xml.slice(d.startCol, d.endCol), '<xref href="gone.dita">');
+  });
+
+  it('leaves entities in CDATA and comments alone', () => {
+    assert.deepEqual(messages('<topic><title>x</title><p><!-- &nope; --></p><codeblock><![CDATA[&nope;]]></codeblock></topic>'), []);
+  });
+});
+
 describe('diagnostics: ordering', () => {
   it('sorts by position, whatever the checks found first', () => {
     const xml = '<topic>\n  <p keyref="gone"/>\n  <p id="a"/>\n  <p id="a"/>\n</topic>';
-    const lines = diag(xml, { keys: new Map() }).map((d) => d.startLine);
+    const lines = diag(xml, { keys: new Map([['other', 'x']]) }).map((d) => d.startLine);
     assert.deepEqual(lines, [1, 3]);
   });
 });
