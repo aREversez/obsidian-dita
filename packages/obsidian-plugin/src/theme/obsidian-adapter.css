@@ -33,6 +33,12 @@
   display: block;
   box-sizing: border-box;
 
+  /* Obsidian turns text selection off on much of its workspace chrome, and
+     `user-select: auto` inherits that "none" through the shadow boundary, so
+     the preview must say outright that its text can be selected and copied. */
+  -webkit-user-select: text;
+  user-select: text;
+
   /* 1. Host tokens */
   --dita-fg: var(--text-normal);
   --dita-fg-muted: var(--text-muted);

@@ -5,7 +5,8 @@
 // that touches the Obsidian API.)
 
 import { dirname, isAbsolute, relative, resolve, sep } from 'path';
-import { buildKeyMapForDocument, decodeHrefPart, renderTopicXml } from '@dita-viewer/core';
+import { buildKeyMapForDocument, decodeHrefPart, renderMapXml, renderTopicXml } from '@dita-viewer/core';
+import { outlineLabel, roleFormatFor } from './roleLabels';
 
 export interface RenderFileInput {
   /** The topic's source text (read through the vault, so unsaved edits elsewhere are not an issue). */
@@ -60,6 +61,36 @@ export function renderDitaFile(input: RenderFileInput): RenderFileResult {
       markConrefs: false,
     });
     return { html: result.html, title: result.title, error: result.error, dependencies };
+  } catch (e) {
+    return { html: '', error: e instanceof Error ? e.message : String(e), dependencies };
+  }
+}
+
+export interface RenderMapInput {
+  xml: string;
+  absPath: string;
+  vaultRoot: string;
+  uiLanguage?: string;
+}
+
+/** Render a .ditamap to its outline tree. Same result shape as renderDitaFile. */
+export function renderDitamapFile(input: RenderMapInput): RenderFileResult {
+  const { xml, absPath, vaultRoot, uiLanguage } = input;
+  const dependencies = new Set<string>([absPath]);
+  try {
+    const keyMap = buildKeyMapForDocument(absPath, {
+      root: vaultRoot,
+      onError: (mapPath, e) => console.warn(`DITA Viewer: could not read keys from ${mapPath}:`, e instanceof Error ? e.message : e),
+    });
+    const html = renderMapXml({
+      xml,
+      docDir: dirname(absPath),
+      keyMap,
+      roleFormat: roleFormatFor(uiLanguage),
+      treeLabel: outlineLabel(uiLanguage),
+      collectDependencies: dependencies,
+    });
+    return { html, dependencies };
   } catch (e) {
     return { html: '', error: e instanceof Error ? e.message : String(e), dependencies };
   }

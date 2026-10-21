@@ -1,8 +1,8 @@
 /*
  * dita-core: host-neutral stylesheet for rendered DITA content.
  *
- * Derived from the VS Code DITA Viewer's media/styles.css (lines 14-905, the
- * topic-content rules; the map/book/site chrome stays with the VS Code host).
+ * Derived from the VS Code DITA Viewer's media/styles.css (lines 14-905 and the DITAMAP tree section, the
+ * topic-content rules, plus the .ditamap outline tree and reltable rules; book/site chrome stays with the VS Code host).
  * Differences from that file, and nothing else:
  *   - every --vscode-* reference became a --dita-* host token (see TOKENS.md),
  *     so the sheet no longer knows which application is hosting it;
@@ -909,4 +909,160 @@ q { font-style: italic; }
 
 /* Section spacing */
 section, .example { margin: 1.5rem 0; }
+
+/* ── DITAMAP tree view ── */
+
+.ditamap-container {
+  padding: 0 0.5rem;
+}
+
+.map-title {
+  font-size: 1.6em;
+  font-weight: 600;
+  margin: 0 0 1rem 0;
+  padding-bottom: 0.3em;
+  border-bottom: 2px solid var(--color-border);
+}
+
+/* BookMap title page: mainbooktitle headline with booktitlealt/subtitle beneath */
+.book-titlepage {
+  margin: 0 0 1.25rem 0;
+  padding-bottom: 0.4em;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.book-titlepage .map-title {
+  margin: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+  font-size: 1.9em;
+}
+
+.book-subtitle {
+  margin: 0.2em 0 0 0;
+  font-size: 1.05em;
+  font-style: italic;
+  opacity: 0.75;
+}
+
+.map-tree {
+  list-style: none;
+  padding-left: 1.2em;
+  margin: 0.25em 0;
+}
+
+.map-tree--inline {
+  padding-left: 0;
+}
+
+.map-tree-item {
+  margin: 0.15em 0;
+  padding: 0.25em 0.4em;
+}
+
+.map-tree-item--nav {
+  cursor: pointer;
+  border-radius: 4px;
+  margin-left: -0.4em;
+  transition: background-color 0.1s ease;
+}
+
+.map-tree-item--nav:hover {
+  background-color: var(--dita-hover-bg, rgba(128, 128, 128, 0.1));
+}
+
+.map-tree-item--keydef {
+  opacity: 0.7;
+}
+
+.map-tree-item--head {
+  font-weight: 600;
+}
+
+.map-tree-item--group {
+  border-left: 2px solid var(--color-border);
+  padding-left: 0.5em;
+}
+
+.map-tree-icon {
+  margin-right: 0.35em;
+  font-size: 0.9em;
+  user-select: none;
+}
+
+/* BookMap role badge (Chapter / Appendix / Part …) */
+.map-tree-badge {
+  display: inline-block;
+  margin-right: 0.45em;
+  padding: 0.05em 0.45em;
+  border-radius: 3px;
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-link);
+  border: 1px solid currentColor;
+  opacity: 0.85;
+  vertical-align: 0.1em;
+  user-select: none;
+}
+
+.map-tree-link {
+  color: var(--color-link);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.map-tree-link:hover {
+  text-decoration: underline;
+}
+
+.map-tree-label {
+  vertical-align: middle;
+}
+
+.map-tree-label--keydef {
+  font-style: italic;
+  color: var(--dita-fg);
+}
+
+.map-tree-label--head {
+  font-weight: 600;
+}
+
+/* Reltable */
+.map-reltable {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.map-reltable-title {
+  font-size: 1.1em;
+  margin: 0 0 0.5rem 0;
+}
+
+.map-reltable-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.relheader th {
+  font-weight: 600;
+  background: var(--color-code-bg);
+  color: var(--dita-fg);
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border);
+}
+
+.relrow td {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border);
+}
+
+.relcell-content {
+  display: block;
+}
+
 } /* @layer dv-base */

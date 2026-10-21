@@ -28,6 +28,11 @@
 
 .dita-scroller {
   overflow-y: auto;
+  /* Selectable and copyable even where an ancestor disables selection; also
+     focusable by click so Ctrl+A in the preview selects the topic. */
+  -webkit-user-select: text;
+  user-select: text;
+  outline: none;
 }
 
 .dita-view {

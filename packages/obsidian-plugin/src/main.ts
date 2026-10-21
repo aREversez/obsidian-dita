@@ -12,8 +12,8 @@ export default class DitaViewerPlugin extends Plugin implements SettingsProvider
     this.settings = normalizeSettings(await this.loadData());
 
     this.registerView(VIEW_TYPE_DITA, (leaf) => new DitaView(leaf, this));
-    // Makes .dita files visible in the vault and opens them in the DITA view.
-    this.registerExtensions(['dita'], VIEW_TYPE_DITA);
+    // Makes .dita and .ditamap files visible in the vault and opens them in the DITA view.
+    this.registerExtensions(['dita', 'ditamap'], VIEW_TYPE_DITA);
     this.addSettingTab(new DitaSettingTab(this.app, this));
 
     for (const mode of VIEW_MODES) {

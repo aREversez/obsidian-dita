@@ -2,10 +2,12 @@ import { Keymap, Menu, TFile, TextFileView, ViewStateResult, WorkspaceLeaf, File
 import { dirname, join } from 'path';
 import coreCss from '../../dita-core/styles/dita-content.css';
 import adapterCss from './theme/obsidian-adapter.css';
-import { renderDitaFile } from './renderFile';
+import { renderDitaFile, renderDitamapFile } from './renderFile';
 import { SettingsProvider } from './settings';
 import { MODE_ICONS, MODE_LABELS, VIEW_MODES, ViewMode, panesFor, parseViewMode, toggleMode } from './viewMode';
 import { SourceEditor, createSourceEditor } from './sourceEditor';
+import { createCompletionEnv } from './completionEnv';
+import { ditaCompletionSource } from './completionSource';
 import { Anchor, isOffsetVisible, previewOffsetForLine } from './syncLines';
 import { Debounced, debounce } from './debounce';
 
@@ -104,17 +106,38 @@ export class DitaView extends TextFileView {
     this.body = this.shadow.createDiv({ cls: 'dita-body' });
     this.body.id = 'dita-content-root';
     this.shadow.addEventListener('click', (evt) => this.onClick(evt as MouseEvent));
+    this.shadow.addEventListener('contextmenu', (evt) => this.onContextMenu(evt as MouseEvent));
+    // Focusable by click, so Ctrl/Cmd+A selects the topic rather than the whole app.
+    this.scroller.tabIndex = -1;
+    this.scroller.addEventListener('keydown', (evt) => this.onPreviewKey(evt));
 
     this.editor = createSourceEditor(this.editorEl, {
       text: this.data ?? '',
       onChange: (text) => this.onEdited(text),
       onScroll: () => this.queueSyncToPreview(),
       onCursorLine: (line) => this.revealInPreview(line),
+      completion: ditaCompletionSource(() => this.completionEnv()),
     });
 
     this.modeAction = this.addAction(MODE_ICONS[this.mode], 'View mode', (evt) => this.showModeMenu(evt));
     this.updateScheme();
     this.applyMode();
+  }
+
+  private envCache?: { path: string; env: ReturnType<typeof createCompletionEnv> };
+
+  private completionEnv(): ReturnType<typeof createCompletionEnv> | undefined {
+    const file = this.file;
+    const adapter = this.app.vault.adapter as { getBasePath?: () => string };
+    if (!file || !adapter.getBasePath) return undefined;
+    if (this.envCache?.path !== file.path) {
+      const vaultRoot = adapter.getBasePath();
+      this.envCache = {
+        path: file.path,
+        env: createCompletionEnv({ absPath: join(vaultRoot, file.path), vaultRoot, isMap: file.extension === 'ditamap' }),
+      };
+    }
+    return this.envCache.env;
   }
 
   async onClose(): Promise<void> {
@@ -267,13 +290,16 @@ export class DitaView extends TextFileView {
     const absPath = join(vaultRoot, file.path);
     const scrollTop = this.scroller.scrollTop;
 
-    const result = renderDitaFile({
-      xml: this.data,
-      absPath,
-      vaultRoot,
-      toResourceUrl: (rel) => adapter.getResourcePath(normalizePath(rel)),
-      uiLanguage: moment.locale(),
-    });
+    const result =
+      file.extension.toLowerCase() === 'ditamap'
+        ? renderDitamapFile({ xml: this.data, absPath, vaultRoot, uiLanguage: moment.locale() })
+        : renderDitaFile({
+            xml: this.data,
+            absPath,
+            vaultRoot,
+            toResourceUrl: (rel) => adapter.getResourcePath(normalizePath(rel)),
+            uiLanguage: moment.locale(),
+          });
     this.dependencies = result.dependencies;
 
     if (result.error !== undefined) {
@@ -347,7 +373,47 @@ export class DitaView extends TextFileView {
 
   // ── preview interaction ──
 
+  /** The selection inside the preview. Chromium keeps selections within a shadow root on the root itself. */
+  private previewSelection(): Selection | null {
+    const root = this.shadow as unknown as { getSelection?: () => Selection | null };
+    return root.getSelection?.() ?? this.host.ownerDocument.getSelection();
+  }
+
+  private selectAllInPreview(): void {
+    const sel = this.previewSelection();
+    sel?.selectAllChildren(this.body);
+  }
+
+  private async copySelection(): Promise<void> {
+    const text = this.previewSelection()?.toString() ?? '';
+    if (text) await navigator.clipboard.writeText(text);
+  }
+
+  private onPreviewKey(evt: KeyboardEvent): void {
+    if ((evt.ctrlKey || evt.metaKey) && !evt.altKey && !evt.shiftKey && evt.key.toLowerCase() === 'a') {
+      evt.preventDefault();
+      this.selectAllInPreview();
+    }
+  }
+
+  private onContextMenu(evt: MouseEvent): void {
+    evt.preventDefault();
+    const hasSelection = (this.previewSelection()?.toString() ?? '') !== '';
+    const menu = new Menu();
+    menu.addItem((item) => item.setTitle('Copy').setIcon('copy').setDisabled(!hasSelection).onClick(() => void this.copySelection()));
+    menu.addItem((item) => item.setTitle('Select all').setIcon('text-select').onClick(() => this.selectAllInPreview()));
+    menu.showAtMouseEvent(evt);
+  }
+
   private onClick(evt: MouseEvent): void {
+    // An outline entry: open the topic it points at. Its href is "#"; the real
+    // target is in data-href, relative to the map.
+    const entry = (evt.target as Element | null)?.closest('a.map-tree-link[data-href]');
+    if (entry && this.file) {
+      evt.preventDefault();
+      this.openRelative(entry.getAttribute('data-href') ?? '', evt);
+      return;
+    }
     const a = (evt.target as Element | null)?.closest('a[href]');
     if (!a || !this.file) {
       this.jumpToSource(evt);
@@ -364,7 +430,12 @@ export class DitaView extends TextFileView {
       this.shadow.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView({ block: 'start' });
       return;
     }
-    // A relative link to another file in the vault.
+    this.openRelative(href, evt);
+  }
+
+  /** Open a file named by a path relative to this document, in a new tab when Ctrl/Cmd is held. */
+  private openRelative(href: string, evt: MouseEvent): void {
+    if (!this.file) return;
     const [path] = href.split('#');
     const target = this.app.vault.getAbstractFileByPath(normalizePath(join(dirname(this.file.path), decodeURIComponent(path))));
     if (target instanceof TFile) {

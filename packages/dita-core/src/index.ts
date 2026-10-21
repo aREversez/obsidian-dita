@@ -11,6 +11,15 @@ export { buildKeySpace } from './editor/keySpace';
 export { readSourceText, setSourceOverlay, clearSourceOverlay } from './editor/sourceText';
 export { decodeHrefPart } from './editor/refResolvers';
 export { buildKeyMapForDocument } from './keyMapForDocument';
+export { complete } from './completion';
+export type { CompletionEnv, CompletionResult, Suggestion, SuggestionKind } from './completion';
+export { collectReferenceableFiles, toRelativeHref } from './language/referenceableFiles';
+export type { ReadDir, WalkEntry } from './language/referenceableFiles';
+export { IMAGE_EXT } from './completionData';
+export { collectIds } from './language/ditaLanguageUtils';
+export { renderMapXml } from './mapRender';
+export type { MapXmlRenderInput } from './mapRender';
+export type { RoleLabelFormatter, RoleLabelInfo } from './render/mapTypeMap';
 export type { KeyMapOptions } from './keyMapForDocument';
 
 /**

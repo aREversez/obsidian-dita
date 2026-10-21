@@ -18,6 +18,8 @@
   "include": [
     "test/**/*",
     "src/renderFile.ts",
+    "src/roleLabels.ts",
+    "src/completionEnv.ts",
     "src/theme/colorMath.ts",
     "src/viewMode.ts",
     "src/settings.ts",

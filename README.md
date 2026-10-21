@@ -1,24 +1,24 @@
 # obsidian-dita
 
-Read DITA topics in Obsidian. `.dita` files open in a formatted reading view
-that takes its colours, fonts and heading style from whichever theme you use.
+Read and edit DITA topics and maps in Obsidian. `.dita` files open in a
+formatted reading view and `.ditamap` files in an outline tree; both take its colours, fonts and heading style from whichever theme you use.
 
 Built on [`@dita-viewer/core`](packages/dita-core), the same rendering engine as
 the [VS Code DITA Viewer](https://github.com/aREversez/VS-Code-DITA-Viewer).
 
 ## Status
 
-**Preview and editing** of single `.dita` topics, desktop only.
+**Preview and editing** of `.dita` topics and `.ditamap` outlines, desktop only.
 
 Works: all topic types and specializations the core renders, `keyref` /
 `conkeyref` against the ditamap near the topic, `conref` / `conrefend`
 (including content from other files, and re-render when those change), images
 inside the vault, MathML, links between topics, light and dark themes, and
-editing the XML source with three view modes (below).
+editing the XML source with three view modes (below), tag / attribute / value
+completion in the editor, and the `.ditamap` outline (below).
 
-Not yet: `.ditamap` views (outline, book, site), tag and attribute completion
-and diagnostics in the editor, conref "jump to source", profiling filters, Git
-compare, DITA-OT. Mobile is not supported because the core reads files through
+Not yet: map book and site views, editor diagnostics, conref "jump to source",
+profiling filters, Git compare, DITA-OT. Mobile is not supported because the core reads files through
 Node.
 
 ## View modes
@@ -40,6 +40,33 @@ mode you last chose for it.
 
 Edits are saved by Obsidian as for any text file, and a change to the file on
 disk is merged into the open editor without moving your caret.
+
+## Completion
+
+In the source editor, completion pops up as you type:
+
+- after `<`: elements, with the usual children of the enclosing element first
+  (`<ul><` offers `li`; `<steps><` offers `step`); every other element is still
+  there. After `</` it offers the element to close. In a `.ditamap` the map
+  vocabulary is used.
+- inside a tag: attributes that are not already written. Picking one inserts
+  `name=""` with the caret between the quotes, and opens the value list where
+  there is one.
+- inside a value: enumerated values (`note type`, `scope`, `processing-role`, …),
+  keys from the map for `keyref` / `conkeyref`, topics and maps for `href` /
+  `conref`, images for `<image href>`, and element ids after `#`. Files are
+  searched below the document's folder, three levels deep, never outside the
+  vault.
+
+## Map outline
+
+A `.ditamap` opens as the same three modes. Reading view shows the outline tree:
+navtitles (or the file name when the map does not name an entry), bookmap
+division badges (`第 1 章` / `Chapter 1`, following the Obsidian language),
+nested submaps, key definitions and reltables. Click an entry to open its topic;
+Ctrl/Cmd-click opens it in a new tab. The outline re-renders when a referenced
+submap changes. Side by side, the outline follows your typing; clicking in it
+does not move the source caret (the outline has no source positions).
 
 ## Install (manual)
 

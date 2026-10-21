@@ -8,12 +8,14 @@ Host-neutral DITA parsing and HTML rendering, shared by the
 
 | Path | Origin |
 | --- | --- |
-| `src/parser/`, `src/render/`, `src/editor/*.ts` | **Verbatim copies** of the same paths in the VS Code DITA Viewer, taken from `dev` at commit `596202d`. These 15 files are exactly the transitive import closure of `renderTopicToHtml` and import nothing from `vscode`. |
-| `src/keyMapForDocument.ts`, `src/index.ts` | New here. The public API, and the key-map lookup without the VS Code workspace features. |
+| `src/parser/`, `src/render/`, `src/editor/*.ts` | **Verbatim copies** of the same paths in the VS Code DITA Viewer, taken from `dev` at commit `596202d`. The 15 files in `parser/`, `render/` and `editor/` are exactly the transitive import closure of `renderTopicToHtml` and import nothing from `vscode`. |
+| `src/language/ditaLanguageUtils.ts`, `src/language/referenceableFiles.ts` | **Verbatim copies** too (same commit): completion-context detection, tag-stack scanning, and the file walk behind `href` completion. Both are `vscode`-free. |
+| `src/keyMapForDocument.ts`, `src/mapRender.ts`, `src/index.ts` | New here. The public API; the key-map lookup without the VS Code workspace features; and `renderMapXml`, which sequences the copied map parser and renderer for a `.ditamap` outline. |
+| `src/completion.ts`, `src/completionData.ts` | New here. Host-neutral completion engine (`complete(text, offset, env)`) and its tables: usual children per element (a ranking aid only, never a filter), enumerated attribute values, which attributes name files. |
 | `src/vscode-stub.d.ts` | Type-only stand-in so the one host-specific function in `topicRender.ts` (`openHrefTarget`) compiles. |
-| `styles/dita-content.css` | The topic-content rules of the VS Code `media/styles.css`, with every `--vscode-*` replaced by a `--dita-*` host token. See the header comment for the complete list of differences. |
+| `styles/dita-content.css` | The topic-content and `.ditamap` outline-tree rules of the VS Code `media/styles.css`, with every `--vscode-*` replaced by a `--dita-*` host token. See the header comment for the complete list of differences. |
 | `styles/TOKENS.md` | The contract between the stylesheet and a host. |
-| `test/` | The upstream tests whose imports stay inside the 15 files (268 tests), unchanged except for import paths. |
+| `test/` | The upstream tests whose imports stay inside the 15 files (plus tests for completion and map rendering), unchanged except for import paths. |
 
 ## Keeping it in sync
 

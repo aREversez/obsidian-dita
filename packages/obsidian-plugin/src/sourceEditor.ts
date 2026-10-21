@@ -14,7 +14,7 @@ import { Annotation, EditorState, Extension } from '@codemirror/state';
 import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view';
 import { bracketMatching, HighlightStyle, indentUnit, syntaxHighlighting } from '@codemirror/language';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
-import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
+import { CompletionSource, autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 import { tags as t } from '@lezer/highlight';
 import { xml } from '@codemirror/lang-xml';
@@ -28,6 +28,8 @@ export interface SourceEditorOptions {
   onScroll: () => void;
   /** The caret moved to another line, by typing or navigation. 0-based line. */
   onCursorLine: (line: number) => void;
+  /** Tag, attribute and value completion. */
+  completion?: CompletionSource;
 }
 
 export interface SourceEditor {
@@ -88,6 +90,21 @@ const theme = EditorView.theme({
   '.cm-matchingBracket': { backgroundColor: 'var(--background-modifier-hover)', outline: '1px solid var(--text-faint)' },
   '.cm-selectionMatch': { backgroundColor: 'var(--text-highlight-bg, var(--background-modifier-hover))' },
   '.cm-searchMatch': { backgroundColor: 'var(--text-highlight-bg)' },
+  '.cm-tooltip': {
+    backgroundColor: 'var(--background-primary)',
+    color: 'var(--text-normal)',
+    border: '1px solid var(--background-modifier-border)',
+    borderRadius: 'var(--radius-s, 4px)',
+    boxShadow: 'var(--shadow-s)',
+  },
+  '.cm-tooltip.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--font-monospace, monospace)', maxHeight: '16em' },
+  '.cm-tooltip-autocomplete ul li[aria-selected]': {
+    backgroundColor: 'var(--interactive-accent)',
+    color: 'var(--text-on-accent)',
+  },
+  '.cm-completionDetail': { color: 'var(--text-muted)', fontStyle: 'normal', marginLeft: '1em' },
+  '.cm-tooltip-autocomplete ul li[aria-selected] .cm-completionDetail': { color: 'inherit' },
+  '.cm-completionMatchedText': { textDecoration: 'none', fontWeight: 'bold' },
   '.cm-panels': { backgroundColor: 'var(--background-secondary)', color: 'var(--text-normal)' },
   '.cm-panels.cm-panels-bottom': { borderTop: '1px solid var(--background-modifier-border)' },
   '.cm-panel.cm-search input, .cm-panel.cm-search button': { fontSize: 'inherit' },
@@ -108,6 +125,7 @@ function baseExtensions(opts: SourceEditorOptions): Extension[] {
     EditorView.lineWrapping,
     EditorView.contentAttributes.of({ spellcheck: 'false', autocapitalize: 'off', autocorrect: 'off' }),
     xml(),
+    ...(opts.completion ? [autocompletion({ override: [opts.completion], icons: false })] : []),
     syntaxHighlighting(highlightStyle),
     theme,
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
