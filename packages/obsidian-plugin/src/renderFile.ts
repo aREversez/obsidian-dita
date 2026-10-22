@@ -136,6 +136,8 @@ export function renderBookFile(input: RenderBookInput): RenderFileResult {
 export interface RenderSiteInput extends RenderBookInput {
   /** Absolute path of the page to show; the first topic when omitted or stale. */
   current?: string;
+  /** Kept by the view between renders so unnamed topics are not re-read each time. */
+  titleCache?: Map<string, { stamp: string; title: string | null }>;
 }
 
 export interface RenderSiteResult extends RenderFileResult {
@@ -149,7 +151,7 @@ export interface RenderSiteResult extends RenderFileResult {
 
 /** Render one page of a .ditamap as a site, plus the sidebar manifest. */
 export function renderSiteFile(input: RenderSiteInput): RenderSiteResult {
-  const { xml, absPath, vaultRoot, toResourceUrl, uiLanguage, current } = input;
+  const { xml, absPath, vaultRoot, toResourceUrl, uiLanguage, current, titleCache } = input;
   const dependencies = new Set<string>([absPath]);
   try {
     const keyMap = buildKeyMapForDocument(absPath, {
@@ -164,6 +166,7 @@ export function renderSiteFile(input: RenderSiteInput): RenderSiteResult {
       labels: siteLabels(uiLanguage),
       uiLanguage,
       current,
+      titleCache,
       // The core resolves each image against the current topic's folder; a
       // path that climbs out of the vault cannot be served as a vault resource.
       toResourceUrl: (targetAbsPath) => {

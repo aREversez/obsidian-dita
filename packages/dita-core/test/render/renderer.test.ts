@@ -1,6 +1,6 @@
 import * as assert from 'assert';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readFileSync } from 'fs';
+import { dirname, join } from 'path';
 import { renderDocument, RenderContext } from '../../src/render/renderer';
 import { parseDita } from '../../src/parser/ditaParser';
 import { DitaNode, SourceRange } from '../../src/parser/domTypes';
@@ -36,6 +36,17 @@ const defaultCtx: RenderContext = {
   asWebviewUri: (p: string) => `vscode-resource:${p}`,
   documentDir: '/test',
 };
+
+/** The shared fixtures live at the repo root; find it from wherever the tests run (src or compiled). */
+function fixture(...parts: string[]): string {
+  let dir = __dirname;
+  while (!existsSync(join(dir, 'test-dita-file'))) {
+    const up = dirname(dir);
+    if (up === dir) throw new Error('test-dita-file not found above ' + __dirname);
+    dir = up;
+  }
+  return join(dir, 'test-dita-file', ...parts);
+}
 
 describe('renderer', () => {
   it('should render a topic with title as h1', () => {
@@ -645,7 +656,7 @@ describe('renderer', () => {
     // through the real parseDita() here (rather than the makeRaw()/makeEl()
     // synthetic tree above) catches any surprises from how sax hands tagNames
     // back, which the unit-level test can't see.
-    const fixturePath = join(__dirname, '..', '..', '..', '..', '..', 'test-dita-file', 'topics', 'mathml_prefixed_test.dita');
+    const fixturePath = fixture('topics', 'mathml_prefixed_test.dita');
     const xml = readFileSync(fixturePath, 'utf-8');
     const doc = parseDita(xml);
     const html = renderDocument(doc.root, defaultCtx);
@@ -760,7 +771,7 @@ describe('renderer', () => {
     // catches anything the sax parser does differently with mfenced's
     // attributes (e.g. attribute name casing/ordering) that the unit-level
     // tests above can't see.
-    const fixturePath = join(__dirname, '..', '..', '..', '..', '..', 'test-dita-file', 'topics', 'mathml_mfenced_test.dita');
+    const fixturePath = fixture('topics', 'mathml_mfenced_test.dita');
     const xml = readFileSync(fixturePath, 'utf-8');
     const doc = parseDita(xml);
     const html = renderDocument(doc.root, defaultCtx);

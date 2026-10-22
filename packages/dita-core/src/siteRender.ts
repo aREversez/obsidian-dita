@@ -14,6 +14,7 @@
 // data-dita-book-xref="path#id" (see baseTypeMap.ts); the host uses this
 // manifest to switch pages before scrolling to the anchor.
 
+import { statSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { DitaDocument } from './parser/domTypes';
 import { parseDitamap, preprocessEntities } from './parser/ditaParser';
@@ -33,6 +34,13 @@ export interface SiteXmlRenderInput extends Omit<BookXmlRenderInput, 'labels' | 
    * first topic rather than rendering an empty page.
    */
   current?: string;
+  /**
+   * Remembers each topic's raw <title> between renders, so a host that
+   * re-renders on every change does not re-read every unnamed topic. An entry
+   * is reused only while the file's modified time and size are unchanged; the
+   * host owns the Map and may keep it for the life of the view.
+   */
+  titleCache?: Map<string, { stamp: string; title: string | null }>;
 }
 
 export interface SiteNavEntry {
@@ -97,7 +105,8 @@ function decodeXmlText(s: string): string {
  * a well-authored map pays no file reads here. Keyrefs in a title are filled
  * from the map's key space before tags are stripped.
  */
-function topicTitleFromXml(xml: string, resolveKey: (key: string) => string | undefined): string | undefined {
+/** The first <title>'s markup, before keyrefs are filled; undefined if there is none. */
+function rawTitleFromXml(xml: string): string | undefined {
   let text: string;
   try {
     text = preprocessEntities(xml);
@@ -105,9 +114,11 @@ function topicTitleFromXml(xml: string, resolveKey: (key: string) => string | un
     return undefined;
   }
   const withoutComments = text.replace(/<!--[\s\S]*?-->/g, '');
-  const match = /<title\b[^>]*>([\s\S]*?)<\/title\s*>/i.exec(withoutComments);
-  if (!match) return undefined;
-  const withKeys = match[1].replace(
+  return /<title\b[^>]*>([\s\S]*?)<\/title\s*>/i.exec(withoutComments)?.[1];
+}
+
+function finishTitle(raw: string, resolveKey: (key: string) => string | undefined): string | undefined {
+  const withKeys = raw.replace(
     /<[^>]*\bkeyref=(?:"([^"]+)"|'([^']+)')[^>]*\/?>/gi,
     (all, doubleQuoted: string | undefined, singleQuoted: string | undefined) =>
       resolveKey(decodeXmlText(doubleQuoted ?? singleQuoted ?? '')) ?? all,
@@ -120,6 +131,16 @@ function topicTitleFromXml(xml: string, resolveKey: (key: string) => string | un
     .replace(/\s+/g, ' ')
     .trim();
   return plain || undefined;
+}
+
+/** modified time + size, or undefined when the file cannot be statted (then nothing is cached). */
+function fileStamp(absPath: string): string | undefined {
+  try {
+    const st = statSync(absPath);
+    return `${st.mtimeMs}:${st.size}`;
+  } catch {
+    return undefined;
+  }
 }
 
 function pageOpen(absPath: string, depth?: number): string {
@@ -139,6 +160,7 @@ function buildSiteNav(
   readFile: (absPath: string) => string,
   resolveKey: (key: string) => string | undefined,
   dependencies: Set<string>,
+  titleCache?: Map<string, { stamp: string; title: string | null }>,
 ): { entries: SiteNavEntry[]; members: string[] } {
   const nav: SiteNavEntry[] = [];
   const members: string[] = [];
@@ -167,7 +189,16 @@ function buildSiteNav(
       let title = entry.displayName;
       if (!entry.displayNameExplicit) {
         try {
-          title = topicTitleFromXml(readFile(absPath), resolveKey) ?? title;
+          const stamp = titleCache ? fileStamp(absPath) : undefined;
+          const hit = stamp !== undefined ? titleCache?.get(absPath) : undefined;
+          let raw: string | null;
+          if (hit && hit.stamp === stamp) {
+            raw = hit.title;
+          } else {
+            raw = rawTitleFromXml(readFile(absPath)) ?? null;
+            if (stamp !== undefined) titleCache?.set(absPath, { stamp, title: raw });
+          }
+          title = (raw === null ? undefined : finishTitle(raw, resolveKey)) ?? title;
         } catch {
           // Missing or unreadable: the map's own fallback label is still
           // better than dropping the page from the sidebar.
@@ -222,6 +253,7 @@ export function renderSiteXml(input: SiteXmlRenderInput): SiteXmlRenderResult {
     readFile,
     resolveKey,
     dependencies,
+    input.titleCache,
   );
 
   // The page is a dependency whether it exists or not: creating a missing

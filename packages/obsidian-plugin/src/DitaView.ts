@@ -98,6 +98,10 @@ export class DitaView extends TextFileView {
   private siteEntries: SiteNavEntry[] = [];
   private sitePages: Array<{ absPath: string; title: string }> = [];
   private siteCurrent?: string;
+  /** The page the preview actually shows; siteCurrent is where the reader asked to go. */
+  private siteShown?: string;
+  /** Raw topic titles by file, so unnamed topics are not re-read on every render. */
+  private readonly siteTitleCache = new Map<string, { stamp: string; title: string | null }>();
   private siteMapTitle?: string;
   /** Relative path of the map the site state above describes. */
   private siteMapPath?: string;
@@ -388,6 +392,8 @@ export class DitaView extends TextFileView {
     this.siteEntries = [];
     this.sitePages = [];
     this.siteCurrent = undefined;
+    this.siteShown = undefined;
+    this.siteTitleCache.clear();
     this.siteMapTitle = undefined;
     this.siteMapPath = undefined;
     this.sitePendingAnchor = undefined;
@@ -658,6 +664,7 @@ export class DitaView extends TextFileView {
         toResourceUrl: (rel) => adapter.getResourcePath(normalizePath(rel)),
         uiLanguage: moment.locale(),
         current: this.siteCurrent,
+        titleCache: this.siteTitleCache,
       });
       result = site;
       if (site.error === undefined) {
@@ -667,6 +674,7 @@ export class DitaView extends TextFileView {
           .filter((entry): entry is SiteNavEntry & { absPath: string } => entry.absPath !== undefined)
           .map((entry) => ({ absPath: entry.absPath, title: entry.title }));
         this.siteCurrent = site.current;
+        this.siteShown = site.current;
         this.siteMapPath = file.path;
         this.renderSiteNav();
         this.updateSiteNavActions();
@@ -697,6 +705,13 @@ export class DitaView extends TextFileView {
       // and say what is wrong, rather than blanking the page on every keystroke.
       this.showError(result.error);
       this.sitePendingAnchor = undefined;
+      // The old page is still on screen: keep the sidebar and the previous/next
+      // buttons describing it, not the page the reader asked for.
+      if (this.mode === 'site' && this.siteCurrent !== this.siteShown) {
+        this.siteCurrent = this.siteShown;
+        this.renderSiteNav();
+        this.updateSiteNavActions();
+      }
       return;
     }
     this.showError(undefined);

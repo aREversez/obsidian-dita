@@ -1,5 +1,5 @@
 import { strict as assert } from 'assert';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 import { renderSiteXml } from '../src/siteRender';
@@ -181,5 +181,27 @@ describe('renderSiteXml', () => {
 
   it('throws on malformed XML so the host can show the message', () => {
     assert.throws(() => renderSiteXml({ xml: '<map><topicref></map>', docDir: dir }));
+  });
+
+  it('reuses a cached topic title until the file changes', () => {
+    const cached = join(dir, 'topics', 'cached.dita');
+    writeFileSync(cached, '<topic id="c"><title>First</title></topic>');
+    const titleCache = new Map<string, { stamp: string; title: string | null }>();
+    let reads = 0;
+    const readFile = (p: string): string => {
+      reads++;
+      return readFileSync(p, 'utf-8');
+    };
+    const xml = map('<topicref href="topics/cached.dita"/>');
+    const titles = (): string[] => renderSiteXml({ xml, docDir: dir, titleCache, readFile, current: cached }).entries.map((e) => e.title);
+
+    assert.deepEqual(titles(), ['First']);
+    const afterFirst = reads;
+    assert.deepEqual(titles(), ['First']);
+    // The second render reads only the page itself; the sidebar title came from the cache.
+    assert.equal(reads - afterFirst, 1);
+
+    writeFileSync(cached, '<topic id="c"><title>Second, longer</title></topic>');
+    assert.deepEqual(titles(), ['Second, longer']);
   });
 });
