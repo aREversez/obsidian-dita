@@ -5,8 +5,9 @@
 // that touches the Obsidian API.)
 
 import { dirname, isAbsolute, relative, resolve, sep } from 'path';
-import { buildKeyMapForDocument, decodeHrefPart, renderBookXml, renderMapXml, renderTopicXml } from '@dita-viewer/core';
-import { bookLabels, outlineLabel, roleFormatFor } from './roleLabels';
+import { buildKeyMapForDocument, decodeHrefPart, renderBookXml, renderMapXml, renderSiteXml, renderTopicXml } from '@dita-viewer/core';
+import type { SiteNavEntry } from '@dita-viewer/core';
+import { bookLabels, outlineLabel, roleFormatFor, siteLabels } from './roleLabels';
 
 export interface RenderFileInput {
   /** The topic's source text (read through the vault, so unsaved edits elsewhere are not an issue). */
@@ -129,5 +130,63 @@ export function renderBookFile(input: RenderBookInput): RenderFileResult {
     return { html: result.html, title: result.title, dependencies };
   } catch (e) {
     return { html: '', error: e instanceof Error ? e.message : String(e), dependencies };
+  }
+}
+
+export interface RenderSiteInput extends RenderBookInput {
+  /** Absolute path of the page to show; the first topic when omitted or stale. */
+  current?: string;
+}
+
+export interface RenderSiteResult extends RenderFileResult {
+  /** Sidebar entries in reading order, topicheads included as groups. */
+  entries: SiteNavEntry[];
+  /** The page actually rendered (the first topic when `current` was stale). */
+  current?: string;
+  /** The current topic's own title. */
+  topicTitle?: string;
+}
+
+/** Render one page of a .ditamap as a site, plus the sidebar manifest. */
+export function renderSiteFile(input: RenderSiteInput): RenderSiteResult {
+  const { xml, absPath, vaultRoot, toResourceUrl, uiLanguage, current } = input;
+  const dependencies = new Set<string>([absPath]);
+  try {
+    const keyMap = buildKeyMapForDocument(absPath, {
+      root: vaultRoot,
+      onError: (mapPath, e) => console.warn(`DITA Viewer: could not read keys from ${mapPath}:`, e instanceof Error ? e.message : e),
+    });
+    const result = renderSiteXml({
+      xml,
+      docDir: dirname(absPath),
+      keyMap,
+      roleFormat: roleFormatFor(uiLanguage),
+      labels: siteLabels(uiLanguage),
+      uiLanguage,
+      current,
+      // The core resolves each image against the current topic's folder; a
+      // path that climbs out of the vault cannot be served as a vault resource.
+      toResourceUrl: (targetAbsPath) => {
+        const rel = relative(vaultRoot, targetAbsPath);
+        if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return '';
+        return toResourceUrl(rel.split(sep).join('/'));
+      },
+      collectDependencies: dependencies,
+    });
+    return {
+      html: result.html,
+      title: result.title,
+      entries: result.entries,
+      current: result.current,
+      topicTitle: result.topicTitle,
+      dependencies,
+    };
+  } catch (e) {
+    return {
+      html: '',
+      error: e instanceof Error ? e.message : String(e),
+      entries: [],
+      dependencies,
+    };
   }
 }

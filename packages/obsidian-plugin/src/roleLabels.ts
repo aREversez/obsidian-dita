@@ -38,3 +38,12 @@ export function outlineLabel(locale: string | undefined): string {
 export function bookLabels(locale: string | undefined): { missingTopic: string } {
   return { missingTopic: locale && /^zh/i.test(locale) ? '找不到主题' : 'Missing topic' };
 }
+
+/** The words site view adds to a single page and to an empty map. */
+export function siteLabels(locale: string | undefined): { missingTopic: string; noTopics: string } {
+  const zh = locale && /^zh/i.test(locale);
+  return {
+    missingTopic: zh ? '找不到主题' : 'Missing topic',
+    noTopics: zh ? '这张映射没有主题。' : 'This map has no topics.',
+  };
+}

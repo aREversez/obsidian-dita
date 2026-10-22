@@ -84,7 +84,7 @@ function escapeHtml(s: string): string {
  * a PDF, ...). Map hrefs were rebased onto the root map's folder by
  * expandDitamapRefs, so docDir is the only base needed here.
  */
-function topicPathOf(entry: MapEntry, docDir: string): string | undefined {
+export function topicPathOf(entry: MapEntry, docDir: string): string | undefined {
   const href = entry.href;
   if (!href || href.startsWith('#')) return undefined;
   if (URL_SCHEME_RE.test(href) || isAbsolute(href)) return undefined;

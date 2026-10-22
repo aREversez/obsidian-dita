@@ -4,3 +4,5 @@ dist-test/
 *.tsbuildinfo
 main.js
 .DS_Store
+
+.obsidian

@@ -639,19 +639,20 @@ describe('renderer', () => {
   });
 
   it('should preserve namespace-prefixed MathML end-to-end through the real sax parser, not just the unit-level tree builder', () => {
-    // mathml_prefixed_test.dita is authored in the mml:-prefixed shape that
-    // Oxygen's equation editor / MathType actually export, as opposed to
-    // mathml_test.dita's hand-written unprefixed shape. Going through the
-    // real parseDita() here (rather than the makeRaw()/makeEl() synthetic
-    // tree above) catches any surprises from how sax hands tagNames back,
-    // which the unit-level test can't see.
-    const fixturePath = join(__dirname, '..', '..', '..', 'test-dita-file', 'fixture', 'topics', 'mathml_prefixed_test.dita');
+    // mathml_prefixed_test.dita is authored with the m: namespace prefix that
+    // DITA 1.3 uses for MathML (the form Oxygen's equation editor emits), as
+    // opposed to mathml_test.dita's hand-written unprefixed shape. Going
+    // through the real parseDita() here (rather than the makeRaw()/makeEl()
+    // synthetic tree above) catches any surprises from how sax hands tagNames
+    // back, which the unit-level test can't see.
+    const fixturePath = join(__dirname, '..', '..', '..', '..', '..', 'test-dita-file', 'topics', 'mathml_prefixed_test.dita');
     const xml = readFileSync(fixturePath, 'utf-8');
     const doc = parseDita(xml);
     const html = renderDocument(doc.root, defaultCtx);
     const foreignStart = html.indexOf('class="foreign-content"');
     const foreignSpan = html.slice(foreignStart, html.indexOf('</span>', foreignStart));
-    assert.ok(!foreignSpan.includes('mml:'), 'no prefixed tag/attribute names should leak into the real parser output');
+    assert.ok(!foreignSpan.includes('m:'), 'no prefixed tag/attribute names should leak into the real parser output');
+    assert.ok(!foreignSpan.includes('xmlns'), 'xmlns declarations should not be carried into the rendered output');
     assert.ok(foreignSpan.includes('<msqrt>'), 'msqrt should survive end-to-end through the real parser, not just the synthetic unit test');
     assert.ok(
       foreignSpan.includes('<msup><mi>a</mi><mn>2</mn></msup>') && foreignSpan.includes('<msup><mi>b</mi><mn>2</mn></msup>'),
@@ -759,7 +760,7 @@ describe('renderer', () => {
     // catches anything the sax parser does differently with mfenced's
     // attributes (e.g. attribute name casing/ordering) that the unit-level
     // tests above can't see.
-    const fixturePath = join(__dirname, '..', '..', '..', 'test-dita-file', 'fixture', 'topics', 'mathml_mfenced_test.dita');
+    const fixturePath = join(__dirname, '..', '..', '..', '..', '..', 'test-dita-file', 'topics', 'mathml_mfenced_test.dita');
     const xml = readFileSync(fixturePath, 'utf-8');
     const doc = parseDita(xml);
     const html = renderDocument(doc.root, defaultCtx);

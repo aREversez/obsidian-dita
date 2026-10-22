@@ -50,7 +50,8 @@ the quick switcher.
 
 1. [x] Outline context menu (open, reveal in source).
 2. [x] Book view (whole map merged into one page).
-3. [ ] Site view: only after book view is stable, and only if wanted.
+3. [x] Site view: one topic per page with a map sidebar, previous/next, and
+       cross-page topic links.
 
 ### Phase 3 — conditional processing
 

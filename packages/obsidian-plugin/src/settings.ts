@@ -22,7 +22,7 @@ export function normalizeSettings(raw: unknown): DitaSettings {
     : DEFAULT_SETTINGS.previewDelayMs;
   const mode = parseViewMode(r.defaultMode, DEFAULT_SETTINGS.defaultMode);
   return {
-    // The default applies to topics too, which have no book view.
+    // The default applies to topics too, which have no site or book view.
     defaultMode: (TOPIC_MODES as readonly string[]).includes(mode) ? mode : DEFAULT_SETTINGS.defaultMode,
     previewDelayMs: Math.min(PREVIEW_DELAY_RANGE.max, Math.max(PREVIEW_DELAY_RANGE.min, delay)),
   };

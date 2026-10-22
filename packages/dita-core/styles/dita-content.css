@@ -997,6 +997,36 @@ section, .example { margin: 1.5rem 0; }
   color: var(--dita-fg-muted, inherit);
 }
 
+/* ── Site view: one topic per page, with a host-rendered sidebar ── */
+
+.dita-site-page {
+  padding: 0 0.5rem;
+}
+
+/* BookMap division label above the page's own title ("Chapter 1", "第 1 章"). */
+.dita-site-role {
+  margin: 0 0 0.35rem 0;
+  font-size: 0.78em;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--dita-fg-muted, inherit);
+}
+
+.dita-site-empty,
+.dita-site-missing,
+.dita-site-error {
+  margin: 1rem 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--dita-border, currentColor);
+  color: var(--dita-fg-muted, inherit);
+}
+
+.dita-site-missing code {
+  background: var(--dita-code-inline-bg, var(--dita-code-bg, transparent));
+  color: inherit;
+}
+
 .map-tree {
   list-style: none;
   padding-left: 1.2em;

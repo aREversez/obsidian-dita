@@ -3,9 +3,12 @@ import { dirname, isAbsolute, join, relative, resolve } from 'path';
 import coreCss from '../../dita-core/styles/dita-content.css';
 import adapterCss from './theme/obsidian-adapter.css';
 import { collectDiagnostics, decodeHrefPart, getKeyDefs, splitRefFragment } from '@dita-viewer/core';
-import { renderBookFile, renderDitaFile, renderDitamapFile } from './renderFile';
+import type { SiteNavEntry } from '@dita-viewer/core';
+import { renderBookFile, renderDitaFile, renderDitamapFile, renderSiteFile } from './renderFile';
+import type { RenderFileResult } from './renderFile';
+import { siteLabels } from './roleLabels';
 import { SettingsProvider } from './settings';
-import { MODE_ICONS, MODE_LABELS, ViewMode, modesFor, panesFor, parseViewMode, toggleMode } from './viewMode';
+import { MODE_ICONS, MODE_LABELS, ViewMode, modesFor, panesFor, parseViewMode, previewKindFor, toggleMode } from './viewMode';
 import { SourceEditor, createSourceEditor } from './sourceEditor';
 import { createCompletionEnv } from './completionEnv';
 import { ditaCompletionSource } from './completionSource';
@@ -61,8 +64,8 @@ function fragmentOf(href: string): string {
 }
 
 /**
- * Reading view, source editor, side-by-side live preview and the map book
- * view for DITA topics and maps.
+ * Reading view, source editor, side-by-side live preview, and the map site
+ * and book views for DITA topics and maps.
  *
  * Reading view and the preview pane render the topic inside a Shadow DOM.
  * Obsidian theme selectors (which target things like `table`, `code`, `a`
@@ -88,6 +91,20 @@ export class DitaView extends TextFileView {
   private modeAction!: HTMLElement;
   /** Shown only while a reveal has a view to go back to. */
   private backAction!: HTMLElement;
+  /** The site sidebar, outside the preview's Shadow DOM. */
+  private siteNav!: HTMLElement;
+  private sitePrevAction!: HTMLElement;
+  private siteNextAction!: HTMLElement;
+  private siteEntries: SiteNavEntry[] = [];
+  private sitePages: Array<{ absPath: string; title: string }> = [];
+  private siteCurrent?: string;
+  private siteMapTitle?: string;
+  /** Relative path of the map the site state above describes. */
+  private siteMapPath?: string;
+  /** Element id to reveal after the next site page is in the DOM. */
+  private sitePendingAnchor?: string;
+  /** Makes each rebuilt sidebar's accessible title id unique in the document. */
+  private siteNavTitleSeq = 0;
 
   private dependencies = new Set<string>();
   /** Files the last diagnostics run read (reference targets, key maps). */
@@ -119,7 +136,7 @@ export class DitaView extends TextFileView {
     return this.file?.basename ?? 'DITA';
   }
 
-  /** True for a .ditamap, the only file that has a book view. */
+  /** True for a .ditamap, the only file that has site or book view. */
   isMapFile(): boolean {
     return this.file?.extension.toLowerCase() === 'ditamap';
   }
@@ -140,6 +157,8 @@ export class DitaView extends TextFileView {
     this.errorEl.hide();
     const panes = this.container.createDiv({ cls: 'dita-panes' });
     this.editorEl = panes.createDiv({ cls: 'dita-source' });
+    this.siteNav = panes.createDiv({ cls: 'dita-site-nav' });
+    this.siteNav.addEventListener('click', (evt) => this.onSiteNavClick(evt as MouseEvent));
     this.scroller = panes.createDiv({ cls: 'dita-scroller' });
     this.host = this.scroller.createDiv({ cls: 'dita-view' });
     this.shadow = this.host.attachShadow({ mode: 'open' });
@@ -170,6 +189,10 @@ export class DitaView extends TextFileView {
 
     this.backAction = this.addAction('arrow-left', 'Back to the previous view', () => this.goBack());
     this.backAction.style.display = 'none';
+    this.sitePrevAction = this.addAction('chevron-left', 'Previous topic', () => this.stepSite(-1));
+    this.sitePrevAction.addClass('dita-site-step');
+    this.siteNextAction = this.addAction('chevron-right', 'Next topic', () => this.stepSite(1));
+    this.siteNextAction.addClass('dita-site-step');
     this.modeAction = this.addAction(MODE_ICONS[this.mode], 'View mode', (evt) => this.showModeMenu(evt));
     this.updateScheme();
     this.applyMode();
@@ -206,11 +229,16 @@ export class DitaView extends TextFileView {
 
   setViewData(data: string, clear: boolean): void {
     this.data = data;
-    // A leaf can be re-used for another file: a topic has no book view.
-    if (this.file && this.mode === 'book' && !this.isMapFile()) {
+    // A leaf can be re-used for another file: a topic has no site or book view.
+    if (this.file && (this.mode === 'site' || this.mode === 'book') && !this.isMapFile()) {
       this.mode = 'reading';
       this.revealReturnMode = undefined;
       if (this.container) this.applyMode();
+    }
+    // Site state describes one map. Reusing the leaf for another map starts
+    // from that map's first topic instead of carrying the old page along.
+    if (this.file && this.siteMapPath !== undefined && this.siteMapPath !== this.file.path) {
+      this.resetSiteState();
     }
     this.scheduleRender.cancel();
     if (!this.editor) return; // onOpen has not run yet; it seeds the editor from this.data
@@ -229,6 +257,7 @@ export class DitaView extends TextFileView {
     this.scheduleRender.cancel();
     this.editor?.load('', true);
     this.body?.replaceChildren();
+    this.resetSiteState();
     this.dependencies.clear();
     this.lintDependencies.clear();
     this.showError(undefined);
@@ -243,11 +272,15 @@ export class DitaView extends TextFileView {
 
   setMode(mode: ViewMode): void {
     if (mode === this.mode) return;
-    // Book view merges a whole map; never put a single topic in it.
-    if (mode === 'book' && !this.isMapFile()) return;
-    // Reading and split show the map outline; book shows the merged topics.
-    // Crossing that boundary needs a re-render even when the source is unchanged.
-    if ((mode === 'book') !== (this.mode === 'book')) this.previewStale = true;
+    // Site and book views need a whole map; never put a single topic in them.
+    if ((mode === 'site' || mode === 'book') && !this.isMapFile()) return;
+    // Topic outline, site page and merged book all share the preview pane but
+    // show different documents. Crossing that boundary needs a re-render even
+    // when the source is unchanged.
+    if (previewKindFor(mode) !== previewKindFor(this.mode)) {
+      this.previewStale = true;
+      if (mode === 'site') this.scroller.scrollTop = 0;
+    }
     // Any deliberate mode change ends the "Back to ..." offer; showSource
     // records a new one after switching to split.
     this.revealReturnMode = undefined;
@@ -316,6 +349,9 @@ export class DitaView extends TextFileView {
     this.container.dataset.mode = this.mode;
     setIcon(this.modeAction, MODE_ICONS[this.mode]);
     this.modeAction.setAttribute('aria-label', MODE_LABELS[this.mode]);
+    this.sitePrevAction.style.display = this.mode === 'site' ? '' : 'none';
+    this.siteNextAction.style.display = this.mode === 'site' ? '' : 'none';
+    this.updateSiteNavActions();
     this.updateBackAction();
     // Typing while only the source was showing left the preview behind.
     if (panes.preview && this.previewStale && this.file) void this.render();
@@ -340,6 +376,156 @@ export class DitaView extends TextFileView {
     const show = back !== undefined && back !== this.mode;
     this.backAction.style.display = show ? '' : 'none';
     if (show) this.backAction.setAttribute('aria-label', `Back to ${MODE_LABELS[back]}`);
+  }
+
+  // ── site navigation ──
+
+  /** Forget the current map's sidebar/page state (new file, or clear()). */
+  private resetSiteState(): void {
+    this.siteEntries = [];
+    this.sitePages = [];
+    this.siteCurrent = undefined;
+    this.siteMapTitle = undefined;
+    this.siteMapPath = undefined;
+    this.sitePendingAnchor = undefined;
+    this.siteNav?.replaceChildren();
+    this.updateSiteNavActions();
+  }
+
+  /** Rebuild the sidebar from the manifest the last site render returned. */
+  private renderSiteNav(): void {
+    if (!this.siteNav) return;
+    const previousScroll = this.siteNav.querySelector<HTMLElement>('.dita-site-nav-scroll')?.scrollTop ?? 0;
+    this.siteNav.replaceChildren();
+
+    const header = this.siteNav.createDiv({ cls: 'dita-site-nav-header' });
+    const title = header.createDiv({
+      cls: 'dita-site-nav-title',
+      text: this.siteMapTitle ?? this.file?.basename ?? 'Site',
+    });
+    const titleId = `dita-site-nav-title-${++this.siteNavTitleSeq}`;
+    title.id = titleId;
+
+    const scroller = this.siteNav.createDiv({ cls: 'dita-site-nav-scroll' });
+    const tree = scroller.createEl('nav', { cls: 'dita-site-nav-tree' });
+    const labels = siteLabels(moment.locale());
+    // Label the navigation landmark from the visible map title. Do not use
+    // aria-label here: Obsidian turns any aria-label into a hover tooltip, and
+    // the nav covers the whole sidebar, so it would pop up over every row.
+    tree.setAttribute('aria-labelledby', titleId);
+    if (this.siteEntries.length === 0) {
+      scroller.createDiv({ cls: 'dita-site-nav-empty', text: labels.noTopics });
+      return;
+    }
+
+    const list = tree.createEl('ul', { cls: 'dita-site-tree' });
+    // Each surviving entry's original depth decides which open list it
+    // belongs to; entries are already compacted and in reading order.
+    const stack: Array<{ depth: number; list: HTMLElement }> = [{ depth: -1, list }];
+    for (let i = 0; i < this.siteEntries.length; i++) {
+      const entry = this.siteEntries[i];
+      while (stack.length > 1 && stack[stack.length - 1].depth >= entry.depth) stack.pop();
+      const parent = stack[stack.length - 1].list;
+      const item = parent.createEl('li', { cls: 'dita-site-item' });
+      const next = this.siteEntries[i + 1];
+      const hasChildren = next !== undefined && next.depth > entry.depth;
+
+      if (entry.isGroup || !entry.absPath) {
+        const group = item.createDiv({ cls: 'dita-site-group' });
+        if (entry.role) group.createSpan({ cls: 'dita-site-role', text: entry.role });
+        group.createSpan({ cls: 'dita-site-group-label', text: entry.title });
+      } else {
+        const link = item.createEl('a', { cls: 'dita-site-link', href: '#' });
+        link.dataset.siteTarget = entry.absPath;
+        if (entry.role) link.createSpan({ cls: 'dita-site-role', text: entry.role });
+        link.createSpan({ cls: 'dita-site-label', text: entry.title });
+        if (entry.absPath === this.siteCurrent) {
+          link.addClass('is-active');
+          link.setAttribute('aria-current', 'page');
+        }
+      }
+
+      if (hasChildren) {
+        const children = item.createEl('ul', { cls: 'dita-site-children' });
+        stack.push({ depth: entry.depth, list: children });
+      }
+    }
+
+    const scroll = scroller;
+    scroll.scrollTop = previousScroll;
+    const active = scroller.querySelector<HTMLElement>('.dita-site-link.is-active');
+    if (active) {
+      // Keep the current page's row visible without moving the page itself.
+      requestAnimationFrame(() => {
+        if (!active.isConnected) return;
+        const row = active.getBoundingClientRect();
+        const box = scroller.getBoundingClientRect();
+        if (row.top < box.top) scroll.scrollTop -= box.top - row.top + 8;
+        else if (row.bottom > box.bottom) scroll.scrollTop += row.bottom - box.bottom + 8;
+      });
+    }
+  }
+
+  private onSiteNavClick(evt: MouseEvent): void {
+    const link = (evt.target as Element | null)?.closest<HTMLElement>('[data-site-target]');
+    const absPath = link?.dataset.siteTarget;
+    if (!link || !absPath) return;
+    evt.preventDefault();
+    if (Keymap.isModEvent(evt)) {
+      this.openSource(absPath, {}, evt);
+      return;
+    }
+    this.openSitePage(absPath);
+  }
+
+  /** Show/hide and enable the header's previous/next topic buttons. */
+  private updateSiteNavActions(): void {
+    if (!this.sitePrevAction || !this.siteNextAction) return;
+    const isSite = this.mode === 'site';
+    this.sitePrevAction.style.display = isSite ? '' : 'none';
+    this.siteNextAction.style.display = isSite ? '' : 'none';
+    if (!isSite) return;
+
+    const index = this.sitePages.findIndex((page) => page.absPath === this.siteCurrent);
+    const previous = index > 0 ? this.sitePages[index - 1] : undefined;
+    const next = index >= 0 ? this.sitePages[index + 1] : undefined;
+    this.setSiteAction(this.sitePrevAction, previous, 'Previous topic');
+    this.setSiteAction(this.siteNextAction, next, 'Next topic');
+  }
+
+  private setSiteAction(action: HTMLElement, target: { title: string } | undefined, fallback: string): void {
+    const disabled = target === undefined;
+    action.toggleClass('is-disabled', disabled);
+    action.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+    action.setAttribute('aria-label', target ? `${fallback}: ${target.title}` : fallback);
+  }
+
+  private stepSite(delta: number): void {
+    const index = this.sitePages.findIndex((page) => page.absPath === this.siteCurrent);
+    const target = this.sitePages[index + delta];
+    if (target) this.openSitePage(target.absPath);
+  }
+
+  /** Switch the site to one topic page, optionally scrolling to an id in it. */
+  private openSitePage(absPath: string, anchor?: string): void {
+    if (this.mode !== 'site' || !absPath) return;
+    if (absPath === this.siteCurrent) {
+      if (anchor) this.scrollToSiteAnchor(anchor);
+      else this.scroller.scrollTop = 0;
+      return;
+    }
+    this.siteCurrent = absPath;
+    this.sitePendingAnchor = anchor;
+    this.scroller.scrollTop = 0;
+    this.previewStale = true;
+    if (panesFor(this.mode).preview) void this.render();
+  }
+
+  private scrollToSiteAnchor(id: string): void {
+    const decoded = decodeHrefPart(id);
+    if (!decoded) return;
+    const anchor = this.shadow.getElementById(decoded);
+    anchor?.scrollIntoView({ block: 'start' });
   }
 
   // ── editing ──
@@ -460,30 +646,54 @@ export class DitaView extends TextFileView {
     const absPath = join(vaultRoot, file.path);
     const scrollTop = this.scroller.scrollTop;
 
-    const result =
-      this.isMapFile() && this.mode === 'book'
-        ? renderBookFile({
-            xml: this.data,
-            absPath,
-            vaultRoot,
-            toResourceUrl: (rel) => adapter.getResourcePath(normalizePath(rel)),
-            uiLanguage: moment.locale(),
-          })
-        : this.isMapFile()
-          ? renderDitamapFile({ xml: this.data, absPath, vaultRoot, uiLanguage: moment.locale() })
-          : renderDitaFile({
-              xml: this.data,
-              absPath,
-              vaultRoot,
-              toResourceUrl: (rel) => adapter.getResourcePath(normalizePath(rel)),
-              uiLanguage: moment.locale(),
-            });
+    let result: RenderFileResult;
+    if (this.isMapFile() && this.mode === 'site') {
+      const site = renderSiteFile({
+        xml: this.data,
+        absPath,
+        vaultRoot,
+        toResourceUrl: (rel) => adapter.getResourcePath(normalizePath(rel)),
+        uiLanguage: moment.locale(),
+        current: this.siteCurrent,
+      });
+      result = site;
+      if (site.error === undefined) {
+        this.siteMapTitle = site.title;
+        this.siteEntries = site.entries;
+        this.sitePages = site.entries
+          .filter((entry): entry is SiteNavEntry & { absPath: string } => entry.absPath !== undefined)
+          .map((entry) => ({ absPath: entry.absPath, title: entry.title }));
+        this.siteCurrent = site.current;
+        this.siteMapPath = file.path;
+        this.renderSiteNav();
+        this.updateSiteNavActions();
+      }
+    } else if (this.isMapFile() && this.mode === 'book') {
+      result = renderBookFile({
+        xml: this.data,
+        absPath,
+        vaultRoot,
+        toResourceUrl: (rel) => adapter.getResourcePath(normalizePath(rel)),
+        uiLanguage: moment.locale(),
+      });
+    } else if (this.isMapFile()) {
+      result = renderDitamapFile({ xml: this.data, absPath, vaultRoot, uiLanguage: moment.locale() });
+    } else {
+      result = renderDitaFile({
+        xml: this.data,
+        absPath,
+        vaultRoot,
+        toResourceUrl: (rel) => adapter.getResourcePath(normalizePath(rel)),
+        uiLanguage: moment.locale(),
+      });
+    }
     this.dependencies = result.dependencies;
 
     if (result.error !== undefined) {
       // Mid-edit text is often not valid: keep the last good preview on screen
       // and say what is wrong, rather than blanking the page on every keystroke.
       this.showError(result.error);
+      this.sitePendingAnchor = undefined;
       return;
     }
     this.showError(undefined);
@@ -491,6 +701,13 @@ export class DitaView extends TextFileView {
     this.previewStale = false;
     this.updateScheme();
     this.scroller.scrollTop = scrollTop;
+    // A cross-page site xref asks for an element on the page that just
+    // arrived; the page has to be laid out before it can be scrolled to.
+    const anchor = this.sitePendingAnchor;
+    this.sitePendingAnchor = undefined;
+    if (anchor && this.mode === 'site') {
+      requestAnimationFrame(() => this.scrollToSiteAnchor(anchor));
+    }
   }
 
   private showError(text: string | undefined): void {
@@ -587,7 +804,10 @@ export class DitaView extends TextFileView {
     evt.preventDefault();
     const target = evt.target as Element | null;
     const entry = target?.closest('a.map-tree-link[data-href]');
-    const bookSection = this.mode === 'book' ? target?.closest('[data-dita-book-file]') : null;
+    const bookSection =
+      this.mode === 'book' || this.mode === 'site'
+        ? target?.closest('[data-dita-book-file]')
+        : null;
     const hasSelection = (this.previewSelection()?.toString() ?? '') !== '';
     const menu = new Menu();
     // After "Reveal in source" the reader can come back from the same menu
@@ -612,7 +832,8 @@ export class DitaView extends TextFileView {
       );
       menu.addSeparator();
     } else if (bookSection) {
-      // Book view has no outline rows; reveal the topic the reader right-clicked.
+      // Book/site views have no outline rows; reveal the topic the reader
+      // right-clicked.
       menu.addItem((item) =>
         item
           .setTitle('Reveal in source')
@@ -649,9 +870,9 @@ export class DitaView extends TextFileView {
   }
 
   /**
-   * "Reveal in source" inside book view: open the topic in a split beside the
-   * book, at the line of the element that was right-clicked. Book view has no
-   * outline rows, so the clicked section is the target.
+   * "Reveal in source" inside book or site view: open the topic in a split
+   * beside the map, at the line of the element that was right-clicked. Those
+   * views have no outline rows, so the clicked page/section is the target.
    */
   /** Show a file's source in a new pane beside this one; the outline or book stays put. */
   private openSourceBeside(file: TFile, line: number, col: number): void {
@@ -703,12 +924,14 @@ export class DitaView extends TextFileView {
       this.openRelative(entry.getAttribute('data-href') ?? '', evt);
       return;
     }
-    // A cross-file xref inside the book: the target is another topic that is
-    // already on the page, so scroll to its section instead of opening a file.
+    // A cross-file xref inside the book: scroll to a section on this page.
+    // Inside the site, switch to the target topic's page first.
     const bookRef = (evt.target as Element | null)?.closest('[data-dita-book-xref]');
     if (bookRef) {
       evt.preventDefault();
-      this.jumpInBook(bookRef.getAttribute('data-dita-book-xref') ?? '');
+      const target = bookRef.getAttribute('data-dita-book-xref') ?? '';
+      if (this.mode === 'site') this.jumpInSite(target);
+      else this.jumpInBook(target);
       return;
     }
     const a = (evt.target as Element | null)?.closest('a[href]');
@@ -735,8 +958,8 @@ export class DitaView extends TextFileView {
 
   /**
    * Open a file named by a path relative to this document, in a new tab when
-   * Ctrl/Cmd is held. `baseAbsPath` overrides the base (a book topic, whose
-   * links are relative to the topic file rather than to the map).
+   * Ctrl/Cmd is held. `baseAbsPath` overrides the base (a book/site topic,
+   * whose links are relative to the topic file rather than to the map).
    */
   private openRelative(href: string, evt?: MouseEvent, baseAbsPath?: string): void {
     const vaultRoot = this.vaultRoot();
@@ -772,6 +995,28 @@ export class DitaView extends TextFileView {
     }
     const anchor = id ? Array.from(section.querySelectorAll('[id]')).find((el) => el.id === id) : undefined;
     (anchor ?? section).scrollIntoView({ block: 'start' });
+  }
+
+  /**
+   * Follow a cross-file xref rendered inside the site: switch to the target
+   * page, then scroll to its element id. A target that is not in the sidebar
+   * means the manifest is stale -- open the topic instead.
+   */
+  private jumpInSite(target: string): void {
+    if (!target) return;
+    const hash = target.indexOf('#');
+    const file = hash < 0 ? target : target.slice(0, hash);
+    const id = hash < 0 ? '' : decodeHrefPart(target.slice(hash + 1));
+    if (file && file !== this.siteCurrent) {
+      if (this.sitePages.some((page) => page.absPath === file)) {
+        this.openSitePage(file, id || undefined);
+        return;
+      }
+      if (file) this.openSource(file, id ? { id } : {});
+      return;
+    }
+    if (id) this.scrollToSiteAnchor(id);
+    else this.scroller.scrollTop = 0;
   }
 
   /** Side by side, clicking the preview puts the caret at that element's source. */
@@ -877,7 +1122,7 @@ export class DitaView extends TextFileView {
     const previous = this.mode;
     if (!visible) {
       this.setMode('split');
-      // Keep a way back to the outline or book the reader came from.
+      // Keep a way back to the outline, site or book the reader came from.
       this.revealReturnMode = previous;
       this.updateBackAction();
     }

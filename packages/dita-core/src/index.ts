@@ -26,6 +26,8 @@ export { renderMapXml } from './mapRender';
 export type { MapXmlRenderInput } from './mapRender';
 export { renderBookXml } from './bookRender';
 export type { BookXmlRenderInput, BookXmlRenderResult } from './bookRender';
+export { renderSiteXml } from './siteRender';
+export type { SiteNavEntry, SiteXmlRenderInput, SiteXmlRenderResult } from './siteRender';
 export { collectMapEntries, getMapTitleText } from './render/mapTypeMap';
 export type { MapEntry } from './render/mapTypeMap';
 export type { RoleLabelFormatter, RoleLabelInfo } from './render/mapTypeMap';
