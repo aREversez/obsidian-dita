@@ -169,6 +169,12 @@ npm run verify      # typecheck, all tests, bundle
 npm run watch -w obsidian-dita
 ```
 
+`npm run build` also copies the bundle into the local test vault at
+`test-dita-file/.obsidian/plugins/dita-viewer` when that folder exists; the
+watch command does the same after each successful rebuild. Use `npm run
+sync:test` to copy the current bundle without rebuilding, or set
+`DITA_TEST_VAULT_PLUGIN` to a different plugin folder.
+
 ## Sample document
 
 [`test-dita-file/`](test-dita-file/) is a DITA 1.3 bookmap fixture for trying

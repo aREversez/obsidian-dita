@@ -3,11 +3,34 @@ import { builtinModules } from 'node:module';
 import { copyFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { syncTestVault } from '../../scripts/sync-test-vault.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const watch = process.argv.includes('--watch');
 const out = resolve(here, 'dist');
 mkdirSync(out, { recursive: true });
+
+// Obsidian loads main.js, manifest.json and styles.css from the plugin folder.
+const copyStatic = () => {
+  for (const f of ['manifest.json', 'styles.css']) copyFileSync(resolve(here, f), resolve(out, f));
+};
+
+// After every successful bundle, mirror dist into the local test vault when it
+// exists. In watch mode this keeps the installed plugin current on each save.
+const syncTestVaultPlugin = {
+  name: 'sync-test-vault',
+  setup(build) {
+    build.onEnd((result) => {
+      if (result.errors.length > 0) return;
+      copyStatic();
+      try {
+        syncTestVault({ quiet: watch });
+      } catch (error) {
+        console.error(`[sync] ${error instanceof Error ? error.message : String(error)}`);
+      }
+    });
+  },
+};
 
 const options = {
   entryPoints: [resolve(here, 'src/main.ts')],
@@ -42,18 +65,12 @@ const options = {
   sourcemap: watch ? 'inline' : false,
   minify: !watch,
   logLevel: 'info',
-};
-
-// Obsidian loads main.js, manifest.json and styles.css from the plugin folder.
-const copyStatic = () => {
-  for (const f of ['manifest.json', 'styles.css']) copyFileSync(resolve(here, f), resolve(out, f));
+  plugins: [syncTestVaultPlugin],
 };
 
 if (watch) {
   const ctx = await esbuild.context(options);
-  copyStatic();
   await ctx.watch();
 } else {
   await esbuild.build(options);
-  copyStatic();
 }
