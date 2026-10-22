@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE map PUBLIC "-//OASIS//DTD DITA Map//EN" "map.dtd">
+<map id="common-keys" xml:lang="zh-CN">
+    <title>共享键定义</title>
+    <keydef keys="product-name">
+        <topicmeta>
+            <keywords>
+                <keyword>Acme Flow Engine</keyword>
+            </keywords>
+        </topicmeta>
+    </keydef>
+    <keydef keys="product-short">
+        <topicmeta>
+            <keywords>
+                <keyword>AFE</keyword>
+            </keywords>
+        </topicmeta>
+    </keydef>
+    <keydef keys="version">
+        <topicmeta>
+            <keywords>
+                <keyword>2.4</keyword>
+            </keywords>
+        </topicmeta>
+    </keydef>
+    <keydef keys="support-email">
+        <topicmeta>
+            <keywords>
+                <keyword>support@example.com</keyword>
+            </keywords>
+        </topicmeta>
+    </keydef>
+    <keydef keys="docs-url">
+        <topicmeta>
+            <linktext>https://docs.example.com/afe</linktext>
+        </topicmeta>
+    </keydef>
+    <keydef keys="troubleshooting-topic" href="../topics/troubleshooting.dita">
+        <topicmeta>
+            <linktext>故障排查</linktext>
+        </topicmeta>
+    </keydef>
+    <keydef keys="glossary-topic" href="../topics/glossary-term.dita">
+        <topicmeta>
+            <linktext>术语：幂等性</linktext>
+        </topicmeta>
+    </keydef>
+    <keydef keys="reuse-library" href="reuse-library.dita">
+        <topicmeta>
+            <linktext>共享内容库</linktext>
+        </topicmeta>
+    </keydef>
+    <keydef keys="role" keyscope="admin">
+        <topicmeta>
+            <keywords>
+                <keyword>平台管理员</keyword>
+            </keywords>
+        </topicmeta>
+    </keydef>
+</map>

@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="safety" xml:lang="zh-CN">
+    <title>安全信息</title>
+    <shortdesc>安装、迁移和维护 <ph keyref="product-name"/> 时需要遵守的安全要求。</shortdesc>
+    <conbody>
+        <p>在执行任何涉及电源、网络或生产数据的操作前，请阅读本节。危险和警告使用
+            <codeph>hazardstatement</codeph> 标注。</p>
+
+        <hazardstatement type="danger">
+            <messagepanel>
+                <typeofhazard>电击危险</typeofhazard>
+                <consequence>接触带电部件可能导致严重伤害或死亡。</consequence>
+                <howtoavoid>断开电源并等待指示灯熄灭后再打开机箱。</howtoavoid>
+            </messagepanel>
+            <hazardsymbol href="../images/hazard.svg">
+                <alt>带感叹号的黄色三角形警告符号。</alt>
+            </hazardsymbol>
+        </hazardstatement>
+
+        <hazardstatement type="warning">
+            <messagepanel>
+                <typeofhazard>数据丢失</typeofhazard>
+                <consequence>覆盖发布目录会删除未备份的旧版本。</consequence>
+                <howtoavoid>先备份 <filepath>./public</filepath>，再运行清理命令。</howtoavoid>
+            </messagepanel>
+            <hazardsymbol href="../images/hazard.svg">
+                <alt>带感叹号的黄色三角形警告符号。</alt>
+            </hazardsymbol>
+        </hazardstatement>
+
+        <section id="symbols">
+            <title>安全符号</title>
+            <fig id="hazard-figure">
+                <title>通用警告符号</title>
+                <image href="../images/hazard.svg" placement="break" width="96">
+                    <alt>带感叹号的黄色三角形警告符号。</alt>
+                </image>
+            </fig>
+            <simpletable id="symbol-table">
+                <sthead>
+                    <stentry>符号</stentry>
+                    <stentry>含义</stentry>
+                    <stentry>要求</stentry>
+                </sthead>
+                <strow>
+                    <stentry>危险</stentry>
+                    <stentry>可能造成严重伤害</stentry>
+                    <stentry>停止操作并联系负责人</stentry>
+                </strow>
+                <strow>
+                    <stentry>警告</stentry>
+                    <stentry>可能造成设备或数据损失</stentry>
+                    <stentry>先备份并确认变更窗口</stentry>
+                </strow>
+            </simpletable>
+        </section>
+
+        <section id="checklist">
+            <title>操作前检查</title>
+            <ul>
+                <li>确认已获得变更批准。</li>
+                <li>确认备份可恢复，而不只是“已复制”。</li>
+                <li audience="admin">确认当前账户具有 <ph keyref="admin.role"/> 权限。</li>
+                <li platform="linux">确认 <filepath>/var/lib/afe</filepath> 有足够空间。</li>
+                <li platform="windows">确认服务账户可以访问 <filepath>C:\ProgramData\AFE</filepath>。</li>
+            </ul>
+        </section>
+
+        <section id="storage">
+            <title>存储与备份</title>
+            <note conref="../common/reuse-library.dita#reuse-library/reuse-warning"/>
+            <p>建议把配置、键映射、ditaval 与内容一起纳入版本控制；图片与生成物按需保留。</p>
+            <p>与安装步骤相关的注意事项见<xref href="install-cli.dita">安装命令行工具</xref>。</p>
+        </section>
+    </conbody>
+    <related-links>
+        <link href="troubleshooting.dita">
+            <linktext>故障排查</linktext>
+        </link>
+        <link href="architecture.dita">
+            <linktext>部署架构</linktext>
+        </link>
+    </related-links>
+</concept>

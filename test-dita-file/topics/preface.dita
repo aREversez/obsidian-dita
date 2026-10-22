@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="preface" xml:lang="zh-CN">
+    <title>前言</title>
+    <shortdesc>本手册介绍 <ph keyref="product-name"/> <ph keyref="version"/> 的安装、使用、参考与维护。</shortdesc>
+    <prolog>
+        <author>文档团队</author>
+        <critdates>
+            <created date="2026-10-01"/>
+            <revised modified="2026-10-22"/>
+        </critdates>
+        <permissions view="all"/>
+        <metadata>
+            <keywords>
+                <keyword>前言</keyword>
+                <keyword>DITA</keyword>
+                <keyword>用户手册</keyword>
+            </keywords>
+            <prodinfo>
+                <prodname>Acme Flow Engine</prodname>
+                <vrmlist>
+                    <vrm version="2.4" release="2026.10"/>
+                </vrmlist>
+            </prodinfo>
+        </metadata>
+    </prolog>
+    <body>
+        <p>欢迎阅读 <ph keyref="product-name"/>（简称 <ph keyref="product-short"/>）
+            的用户手册。本版本为 <ph keyref="version"/>，面向 <ph keyref="admin.role"/>、
+            开发者与日常运维人员。</p>
+
+        <p conref="../common/reuse-library.dita#reuse-library/reuse-intro"/>
+
+        <p conref="../common/reuse-library.dita#reuse-library/reuse-intro"
+            conrefend="../common/reuse-library.dita#reuse-library/reuse-middle"/>
+
+        <note conkeyref="reuse-library/reuse-note"/>
+
+        <section id="audience">
+            <title>适用读者</title>
+            <p>不同读者可以从以下入口开始：</p>
+            <ul>
+                <li audience="admin">平台管理员：阅读<xref href="getting-started.dita">快速开始</xref>与
+                    <xref href="troubleshooting.dita#troubleshooting/solution-license">许可证故障排查</xref>。</li>
+                <li audience="developer">开发者：阅读<xref href="api-reference.dita">API 参考</xref>与
+                    <xref href="command-reference.dita">命令参考</xref>。</li>
+                <li audience="internal" props="internal-only">内部审阅者：关注<xref
+                    href="release-notes.dita">版本说明</xref>中的条件内容。</li>
+            </ul>
+            <p platform="linux">Linux 用户请优先阅读 <filepath>/etc/afe/afe.conf</filepath> 的权限说明。</p>
+            <p platform="windows">Windows 用户请优先阅读服务账户与路径长度限制。</p>
+        </section>
+
+        <section id="conventions">
+            <title>文档约定</title>
+            <dl>
+                <dlentry>
+                    <dt>命令</dt>
+                    <dd>使用 <cmdname>flowctl</cmdname> 开头，例如
+                        <codeph>flowctl validate --strict</codeph>。</dd>
+                </dlentry>
+                <dlentry>
+                    <dt>占位符</dt>
+                    <dd>使用 <varname>&lt;flow-id&gt;</varname> 表示需要替换的值。</dd>
+                </dlentry>
+                <dlentry>
+                    <dt>提示</dt>
+                    <dd>提示、注意、重要、警告和危险使用不同的 <codeph>note</codeph> 类型。</dd>
+                </dlentry>
+            </dl>
+            <p>引用外部资料时使用 <cite>Acme Flow Engine 架构白皮书</cite> 的写法；引用产品名时使用
+                <tm tmtype="reg" trademark="Acme">Acme</tm>。行内引用示例：<q>先验证，再发布。</q></p>
+            <p>支持地址：<ph keyref="support-email"/>。在线文档：<ph keyref="docs-url"/>。</p>
+        </section>
+
+        <section id="shared">
+            <title>共享内容示例</title>
+            <p>下面的清单通过 <codeph>conkeyref</codeph> 从共享内容库取得：</p>
+            <ul conkeyref="reuse-library/reuse-checklist">
+                <li>占位条目：共享清单会替换整个列表。</li>
+            </ul>
+            <p>共享内容库也可以直接作为普通文件打开，便于对照检查。</p>
+        </section>
+    </body>
+    <related-links>
+        <link href="overview.dita">
+            <linktext>产品概览</linktext>
+        </link>
+        <link href="troubleshooting.dita">
+            <linktext>故障排查</linktext>
+        </link>
+        <link href="https://docs.example.com/afe" scope="external" format="html">
+            <linktext>在线文档</linktext>
+        </link>
+    </related-links>
+</topic>

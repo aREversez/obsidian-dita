@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE bookmap PUBLIC "-//OASIS//DTD DITA BookMap//EN" "bookmap.dtd">
+<bookmap id="complex-book" xml:lang="zh-CN">
+    <booktitle>
+        <mainbooktitle><ph keyref="product-name"/> 用户手册</mainbooktitle>
+        <booktitlealt><ph keyref="product-short"/> <ph keyref="version"/> 文档集</booktitlealt>
+        <booktitlealt>安装、使用、参考与维护</booktitlealt>
+    </booktitle>
+    <bookmeta>
+        <author>文档团队</author>
+        <critdates>
+            <created date="2026-10-01"/>
+            <revised modified="2026-10-22"/>
+        </critdates>
+        <permissions view="all"/>
+        <metadata>
+            <keywords>
+                <keyword>Acme Flow Engine</keyword>
+                <keyword>用户手册</keyword>
+                <keyword>DITA</keyword>
+            </keywords>
+        </metadata>
+    </bookmeta>
+
+    <frontmatter>
+        <mapref href="common/keys.ditamap" processing-role="resource-only"/>
+        <preface href="topics/preface.dita">
+            <topicmeta>
+                <navtitle>前言</navtitle>
+            </topicmeta>
+        </preface>
+    </frontmatter>
+
+    <part navtitle="第一部分：入门">
+        <chapter href="topics/overview.dita">
+            <topicmeta>
+                <navtitle>产品概览</navtitle>
+            </topicmeta>
+            <topicref href="topics/how-it-works.dita"/>
+            <topicref href="topics/architecture.dita"/>
+        </chapter>
+        <chapter href="topics/getting-started.dita">
+            <topicmeta>
+                <navtitle>快速开始</navtitle>
+            </topicmeta>
+            <topicref href="topics/install-cli.dita">
+                <topicmeta>
+                    <navtitle>安装命令行工具</navtitle>
+                </topicmeta>
+            </topicref>
+        </chapter>
+    </part>
+
+    <part navtitle="第二部分：参考与维护">
+        <chapter href="topics/command-reference.dita">
+            <topicmeta>
+                <navtitle>命令参考</navtitle>
+            </topicmeta>
+        </chapter>
+        <chapter href="topics/api-reference.dita">
+            <topicmeta>
+                <navtitle>API 参考</navtitle>
+            </topicmeta>
+        </chapter>
+        <topichead navtitle="维护与培训">
+            <topicref href="topics/release-notes.dita">
+                <topicmeta>
+                    <navtitle>版本说明</navtitle>
+                </topicmeta>
+            </topicref>
+            <topicref href="topics/learning-overview.dita">
+                <topicmeta>
+                    <navtitle>学习路径</navtitle>
+                </topicmeta>
+            </topicref>
+        </topichead>
+    </part>
+
+    <appendix href="topics/troubleshooting.dita">
+        <topicmeta>
+            <navtitle>故障排查</navtitle>
+        </topicmeta>
+    </appendix>
+    <appendix href="topics/safety.dita">
+        <topicmeta>
+            <navtitle>安全信息</navtitle>
+        </topicmeta>
+    </appendix>
+
+    <backmatter>
+        <booklists>
+            <glossarylist>
+                <topicref href="topics/glossary-term.dita">
+                    <topicmeta>
+                        <navtitle>术语：幂等性</navtitle>
+                    </topicmeta>
+                </topicref>
+                <topicref href="topics/glossary-group.dita">
+                    <topicmeta>
+                        <navtitle>术语组：并发与一致性</navtitle>
+                    </topicmeta>
+                </topicref>
+            </glossarylist>
+        </booklists>
+    </backmatter>
+
+    <reltable>
+        <relheader>
+            <relcolspec/>
+            <relcolspec/>
+            <relcolspec/>
+        </relheader>
+        <relrow>
+            <relcell>
+                <topicref href="topics/overview.dita"/>
+            </relcell>
+            <relcell>
+                <topicref href="topics/getting-started.dita"/>
+            </relcell>
+            <relcell>
+                <topicref href="topics/command-reference.dita"/>
+            </relcell>
+        </relrow>
+        <relrow>
+            <relcell>
+                <topicref href="topics/how-it-works.dita"/>
+            </relcell>
+            <relcell>
+                <topicref href="topics/install-cli.dita"/>
+            </relcell>
+            <relcell>
+                <topicref href="topics/api-reference.dita"/>
+            </relcell>
+        </relrow>
+        <relrow>
+            <relcell>
+                <topicref href="topics/safety.dita"/>
+            </relcell>
+            <relcell>
+                <topicref href="topics/troubleshooting.dita"/>
+            </relcell>
+            <relcell>
+                <topicref href="topics/release-notes.dita"/>
+            </relcell>
+        </relrow>
+    </reltable>
+</bookmap>

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE glossentry PUBLIC "-//OASIS//DTD DITA Glossary Entry//EN" "glossentry.dtd">
+<glossentry id="glossary-term" xml:lang="zh-CN">
+    <glossterm id="glossterm">幂等性</glossterm>
+    <glossdef>同一操作重复执行时，系统状态与首次执行相同。发布器的验证步骤设计为幂等，
+        因此可以安全重跑。</glossdef>
+    <glossBody>
+        <glossPartOfSpeech value="noun"/>
+        <glossStatus value="approved"/>
+        <glossProperty>可重复执行</glossProperty>
+        <glossSurfaceForm>幂等性</glossSurfaceForm>
+        <glossUsage>不要把“幂等”与“无副作用”混为一谈；幂等操作仍可能产生日志或时间戳变化。</glossUsage>
+        <glossScopeNote>适用于验证、构建和增量发布流程。</glossScopeNote>
+        <glossSymbol href="../images/logo.svg">
+            <alt>Acme Flow Engine 标志</alt>
+        </glossSymbol>
+        <glossAlt>
+            <glossAcronym>idempotency</glossAcronym>
+            <glossAlternateFor href="glossary-term.dita#glossary-term/glossterm"/>
+        </glossAlt>
+        <glossAlt>
+            <glossSynonym>可重复执行</glossSynonym>
+            <glossAlternateFor href="glossary-term.dita#glossary-term/glossterm"/>
+        </glossAlt>
+    </glossBody>
+    <related-links>
+        <link href="how-it-works.dita#how-it-works/parse">
+            <linktext>解析阶段</linktext>
+        </link>
+        <link href="glossary-group.dita">
+            <linktext>并发与一致性术语组</linktext>
+        </link>
+    </related-links>
+</glossentry>

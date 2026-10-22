@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="overview" xml:lang="zh-CN">
+    <title>产品概览</title>
+    <shortdesc><ph keyref="product-name"/> 把内容采集、DITA 解析、主题渲染和发布串成一条可重复的流水线。</shortdesc>
+    <prolog>
+        <author>文档团队</author>
+        <metadata>
+            <keywords>
+                <keyword>概览</keyword>
+                <keyword>流水线</keyword>
+                <keyword>组件</keyword>
+            </keywords>
+        </metadata>
+    </prolog>
+    <body>
+        <p><b>Acme Flow Engine</b> 是一个面向技术文档团队的发布引擎。它支持
+            <i>DITA</i>、<u>Markdown</u> 与 <tt>HTML</tt> 输入，并能生成站点、整书与帮助中心。
+            版本 <ph keyref="version"/> 的重点是 <line-through>旧版发布器</line-through>
+            <overline>统一渲染核心</overline>。</p>
+
+        <p>行内能力示例：H<sub>2</sub>O、E = mc<sup>2</sup>、布尔值 <boolean state="yes"/>、
+            菜单 <menucascade><uicontrol>文件</uicontrol><uicontrol>导出</uicontrol></menucascade>、
+            窗口 <wintitle>发布任务</wintitle>、按钮 <uicontrol>开始</uicontrol>、
+            选项 <option>--strict</option>、参数 <parmname>flow-id</parmname>、
+            命令 <cmdname>flowctl</cmdname>、变量 <varname>FLOW_HOME</varname>。</p>
+
+        <p>术语 <term>幂等性</term> 表示同一操作重复执行不会改变结果。相关定义见
+            <xref keyref="glossary-topic"/>。</p>
+
+        <section id="capabilities">
+            <title>核心能力</title>
+            <ul>
+                <li>从文件系统、HTTP API 和消息队列采集内容。</li>
+                <li>解析 DITA 主题、映射、键空间与内容引用。</li>
+                <li>使用主题样式渲染 HTML，并保留表格、图片与 MathML。</li>
+                <li>按条件属性筛选内容，生成面向不同读者的版本。</li>
+            </ul>
+            <ol>
+                <li>准备内容和键映射。</li>
+                <li>运行验证并修复诊断信息。</li>
+                <li>选择站点、整书或 PDF 输出。</li>
+            </ol>
+            <sl>
+                <sli>输入：DITA、Markdown、图片、键映射。</sli>
+                <sli>处理：解析、复用、条件过滤、链接解析。</sli>
+                <sli>输出：HTML、PDF、JSON 清单。</sli>
+            </sl>
+        </section>
+
+        <section id="flow">
+            <title>数据流</title>
+            <p>下面的流程图展示从输入到输出的三个阶段。</p>
+            <fig id="flow-figure">
+                <title>三步处理流程</title>
+                <image href="../images/flow.svg" placement="break" scalefit="yes">
+                    <alt>输入进入处理阶段，再进入输出阶段。</alt>
+                </image>
+            </fig>
+            <p>同一张图也可以使用固定宽度嵌入正文：
+                <image href="../images/logo.svg" placement="inline" width="180">
+                    <alt>Acme Flow Engine 标志</alt>
+                </image>
+            </p>
+        </section>
+
+        <section id="components">
+            <title>组件矩阵</title>
+            <table id="component-matrix">
+                <title>组件与职责</title>
+                <tgroup cols="4">
+                    <colspec colname="c1" colnum="1"/>
+                    <colspec colname="c2" colnum="2"/>
+                    <colspec colname="c3" colnum="3"/>
+                    <colspec colname="c4" colnum="4"/>
+                    <thead>
+                        <row>
+                            <entry>层次</entry>
+                            <entry>组件</entry>
+                            <entry>职责</entry>
+                            <entry>输出</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry morerows="1">采集</entry>
+                            <entry namest="c2" nameend="c3">连接器</entry>
+                            <entry>规范化</entry>
+                        </row>
+                        <row>
+                            <entry>文件系统</entry>
+                            <entry>读取 DITA 与图片</entry>
+                        </row>
+                        <row>
+                            <entry>处理</entry>
+                            <entry namest="c2" nameend="c3">解析与复用</entry>
+                            <entry>内存树</entry>
+                        </row>
+                        <row>
+                            <entry>输出</entry>
+                            <entry>渲染器</entry>
+                            <entry>HTML / PDF</entry>
+                            <entry>发布包</entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table>
+        </section>
+
+        <section id="quick-compare">
+            <title>快速对照</title>
+            <simpletable id="output-compare">
+                <sthead>
+                    <stentry>输出</stentry>
+                    <stentry>适用场景</stentry>
+                    <stentry>是否包含导航</stentry>
+                </sthead>
+                <strow>
+                    <stentry>站点</stentry>
+                    <stentry>在线帮助</stentry>
+                    <stentry>是</stentry>
+                </strow>
+                <strow>
+                    <stentry>整书</stentry>
+                    <stentry>离线阅读与审阅</stentry>
+                    <stentry>是</stentry>
+                </strow>
+                <strow>
+                    <stentry>JSON</stentry>
+                    <stentry>自动化集成</stentry>
+                    <stentry>否</stentry>
+                </strow>
+            </simpletable>
+        </section>
+
+        <section id="commands">
+            <title>命令示例</title>
+            <p>查看状态：</p>
+            <codeblock outputclass="language-bash">flowctl status --json</codeblock>
+            <p>屏幕输出示例：</p>
+            <screen>NAME       READY   VERSION
+flow-api   true    2.4.0</screen>
+            <p>系统输出：<systemoutput>validated 42 topics, 0 errors</systemoutput></p>
+            <p>用户输入：<userinput>flowctl validate --strict</userinput></p>
+        </section>
+
+        <section id="notes">
+            <title>提示类型</title>
+            <note type="note">普通说明：发布前请确认键映射。</note>
+            <note type="tip">提示：使用 <codeph>--dry-run</codeph> 先检查变更。</note>
+            <note type="important">重要：不要同时运行两个发布任务。</note>
+            <note type="warning">警告：删除缓存会延长下一次构建时间。</note>
+            <note type="danger">危险：不要在生产环境直接覆盖正在使用的发布目录。</note>
+            <lq>
+                <p>“先验证，再发布；先备份，再迁移。”</p>
+            </lq>
+            <p>脚注示例：验证器会检查重复 id<fn>重复 id 会让交叉引用指向错误的目标。</fn>。</p>
+        </section>
+
+        <section id="anchor-demo">
+            <title>锚点与链接</title>
+            <p id="overview-anchor">这是一个可跳转的段落锚点。使用
+                <xref href="overview.dita#overview/overview-anchor">页内链接</xref>可以回到这里。</p>
+            <p>跨主题链接：<xref href="how-it-works.dita#how-it-works/ingest">采集阶段</xref>；
+                带自定义文字的链接：<xref href="command-reference.dita">命令参考</xref>。</p>
+            <p>未写链接文字时，渲染器会尝试读取目标主题的标题。</p>
+        </section>
+
+        <example id="overview-example">
+            <title>最小发布配置</title>
+            <codeblock outputclass="language-yaml">source: ./content
+output: ./public
+keys: ./common/keys.ditamap
+ditaval: ./common/strict.ditaval</codeblock>
+        </example>
+
+        <draft-comment author="reviewer">发布前确认条件属性的取值与 ditaval 一致。</draft-comment>
+    </body>
+    <related-links>
+        <link href="how-it-works.dita">
+            <linktext>工作原理</linktext>
+        </link>
+        <link href="architecture.dita">
+            <linktext>部署架构</linktext>
+        </link>
+    </related-links>
+</topic>

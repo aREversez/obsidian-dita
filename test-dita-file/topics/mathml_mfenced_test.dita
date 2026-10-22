@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="mathml_mfenced_test" xml:lang="zh-CN">
+    <title>mfenced（括号/绝对值）渲染测试</title>
+    <shortdesc>Oxygen 公式编辑器导出的括号和绝对值默认都用 mfenced 表示，而 Chromium 的 MathML Core 实现不认识这个标签，会把整个 mfenced 连同其中内容一起丢弃。这两个公式取自真实报告的问题，用于确认括号/竖线会被展开成显式的 mo 字符而不是消失。</shortdesc>
+    <body>
+        <section id="section_aspectratio">
+            <title>aspectRatio（分母括号）</title>
+            <p>分母的两个求和项应各自被一对圆括号包住：
+                <mathml>
+                    <m:math xmlns:m="http://www.w3.org/1998/Math/MathML">
+                        <m:msub>
+                            <m:mrow><m:mi mathvariant="normal">aspectRatio</m:mi></m:mrow>
+                            <m:mrow><m:mi mathvariant="normal">i</m:mi></m:mrow>
+                        </m:msub>
+                        <m:mo>=</m:mo>
+                        <m:mfrac>
+                            <m:mrow>
+                                <m:mi mathvariant="normal">D</m:mi>
+                                <m:mo>×</m:mo>
+                                <m:mi mathvariant="normal">N</m:mi>
+                                <m:mo>×</m:mo>
+                                <m:mi mathvariant="normal">V</m:mi>
+                            </m:mrow>
+                            <m:mrow>
+                                <m:mfenced separators="|">
+                                    <m:mrow>
+                                        <m:munderover>
+                                            <m:mo>∑</m:mo>
+                                            <m:mrow><m:mi mathvariant="normal">j</m:mi><m:mo>=</m:mo><m:mn>1</m:mn></m:mrow>
+                                            <m:mrow><m:mi mathvariant="normal">N</m:mi></m:mrow>
+                                        </m:munderover>
+                                        <m:msub>
+                                            <m:mrow><m:mi mathvariant="normal">A</m:mi></m:mrow>
+                                            <m:mrow><m:mi mathvariant="normal">j</m:mi></m:mrow>
+                                        </m:msub>
+                                    </m:mrow>
+                                </m:mfenced>
+                                <m:mo>×</m:mo>
+                                <m:mfenced separators="|">
+                                    <m:mrow>
+                                        <m:munderover>
+                                            <m:mo>∑</m:mo>
+                                            <m:mrow><m:mi mathvariant="normal">j</m:mi><m:mo>=</m:mo><m:mn>1</m:mn></m:mrow>
+                                            <m:mrow><m:mi mathvariant="normal">N</m:mi></m:mrow>
+                                        </m:munderover>
+                                        <m:msub>
+                                            <m:mrow><m:mi mathvariant="normal">N</m:mi></m:mrow>
+                                            <m:mrow><m:mi mathvariant="normal">j</m:mi></m:mrow>
+                                        </m:msub>
+                                    </m:mrow>
+                                </m:mfenced>
+                            </m:mrow>
+                        </m:mfrac>
+                    </m:math>
+                </mathml>
+            </p>
+        </section>
+        <section id="section_orthqual">
+            <title>OrthQual（绝对值竖线）</title>
+            <p>分子应显示为一对竖线包住的绝对值：
+                <mathml>
+                    <m:math xmlns:m="http://www.w3.org/1998/Math/MathML">
+                        <m:mi mathvariant="normal">OrthQual</m:mi>
+                        <m:mo>=</m:mo>
+                        <m:msub>
+                            <m:mrow><m:mi mathvariant="normal">max</m:mi></m:mrow>
+                            <m:mrow><m:mi mathvariant="normal">i</m:mi><m:mo>=</m:mo><m:mn>1</m:mn></m:mrow>
+                        </m:msub>
+                        <m:mo>{</m:mo>
+                        <m:mfrac>
+                            <m:mrow>
+                                <m:mfenced close="|" open="|" separators="|">
+                                    <m:mrow>
+                                        <m:msub>
+                                            <m:mrow><m:mi mathvariant="normal">angle</m:mi></m:mrow>
+                                            <m:mrow><m:mi mathvariant="normal">j</m:mi></m:mrow>
+                                        </m:msub>
+                                    </m:mrow>
+                                </m:mfenced>
+                            </m:mrow>
+                            <m:mrow><m:mn>90</m:mn></m:mrow>
+                        </m:mfrac>
+                        <m:mo>}</m:mo>
+                    </m:math>
+                </mathml>
+            </p>
+        </section>
+        <section id="section_checklist">
+            <title>验证要点</title>
+            <ul>
+                <li>aspectRatio 分母的两个求和项各自应看到一对圆括号 ( )，不是求和符号裸露在外没有括号</li>
+                <li>OrthQual 分子应看到一对竖线 | |，不是没有任何绝对值符号</li>
+                <li>如果括号/竖线完全不见了（不是变成别的符号，是彻底消失），说明 mfenced 又被当成浏览器原生认识的标签直接透传，没有展开成 mo</li>
+            </ul>
+        </section>
+    </body>
+</topic>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<val>
+    <!-- 面向内部读者的构建：排除内部专用内容，同时保留管理员内容。 -->
+    <prop att="audience" val="internal" action="exclude"/>
+    <prop att="audience" val="admin" action="include"/>
+    <prop att="platform" val="windows" action="exclude"/>
+    <prop att="product" val="legacy" action="exclude"/>
+    <prop att="otherprops" val="beta" action="exclude"/>
+    <prop att="props" val="internal-only" action="exclude"/>
+</val>

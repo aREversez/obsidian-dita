@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE reference PUBLIC "-//OASIS//DTD DITA Reference//EN" "reference.dtd">
+<reference id="api-reference" xml:lang="zh-CN">
+    <title>API 参考</title>
+    <shortdesc>发布 API 的端点、参数、响应与延迟模型。</shortdesc>
+    <prolog>
+        <author>文档团队</author>
+        <metadata>
+            <keywords>
+                <keyword>API</keyword>
+                <keyword>REST</keyword>
+                <keyword>延迟</keyword>
+            </keywords>
+        </metadata>
+    </prolog>
+    <refbody>
+        <refsyn>
+            <title>请求语法</title>
+            <p><synph><kwd>POST</kwd> <oper>/v1/flows</oper> <delim>{</delim><var>flow</var><delim>}</delim></synph></p>
+            <syntaxdiagram>
+                <groupseq>
+                    <kwd>POST</kwd>
+                    <sep> </sep>
+                    <oper>/v1/flows</oper>
+                </groupseq>
+                <groupchoice>
+                    <groupcomp><kwd>?dryRun=true</kwd></groupcomp>
+                    <groupcomp><kwd>?dryRun=false</kwd></groupcomp>
+                </groupchoice>
+            </syntaxdiagram>
+            <p>请求头必须包含 <codeph>Authorization: Bearer &lt;token&gt;</codeph> 与
+                <codeph>Content-Type: application/json</codeph>。</p>
+        </refsyn>
+
+        <section id="parameters">
+            <title>请求参数</title>
+            <table id="parameter-table">
+                <title>参数定义</title>
+                <tgroup cols="4">
+                    <colspec colname="p1" colnum="1"/>
+                    <colspec colname="p2" colnum="2"/>
+                    <colspec colname="p3" colnum="3"/>
+                    <colspec colname="p4" colnum="4"/>
+                    <thead>
+                        <row>
+                            <entry>参数</entry>
+                            <entry>类型</entry>
+                            <entry>必填</entry>
+                            <entry>说明</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry><parmname>name</parmname></entry>
+                            <entry>string</entry>
+                            <entry>是</entry>
+                            <entry>流程名称，长度 1–64。</entry>
+                        </row>
+                        <row>
+                            <entry><parmname>source</parmname></entry>
+                            <entry>object</entry>
+                            <entry>是</entry>
+                            <entry>来源配置，见下表。</entry>
+                        </row>
+                        <row>
+                            <entry><parmname>dryRun</parmname></entry>
+                            <entry>boolean</entry>
+                            <entry>否</entry>
+                            <entry>只验证，不创建流程。</entry>
+                        </row>
+                        <row>
+                            <entry morerows="1"><parmname>filters</parmname></entry>
+                            <entry namest="p2" nameend="p3">array</entry>
+                            <entry>按 <codeph>audience</codeph> 与 <codeph>platform</codeph> 过滤。</entry>
+                        </row>
+                        <row>
+                            <entry>string</entry>
+                            <entry>最多 8 个过滤表达式。</entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table>
+        </section>
+
+        <section id="response">
+            <title>响应</title>
+            <codeblock outputclass="language-json">{
+  "id": "flow-7f3a",
+  "name": "demo",
+  "status": "ready",
+  "version": "2.4"
+}</codeblock>
+            <p>失败时返回 <codeph>application/problem+json</codeph>，并包含
+                <varname>type</varname>、<varname>title</varname> 与 <varname>detail</varname>。</p>
+            <msgblock>HTTP/1.1 422 Unprocessable Entity
+Content-Type: application/problem+json
+
+{"type":"validation","title":"Invalid source","detail":"source.path is required"}</msgblock>
+        </section>
+
+        <section id="latency">
+            <title>延迟模型</title>
+            <equation-figure id="latency-equation">
+                <title>第 95 百分位延迟</title>
+                <equation-block>
+                    <mathml>
+                        <m:math xmlns:m="http://www.w3.org/1998/Math/MathML">
+                            <m:mrow>
+                                <m:msub>
+                                    <m:mi>L</m:mi>
+                                    <m:mn>95</m:mn>
+                                </m:msub>
+                                <m:mo>=</m:mo>
+                                <m:mi>&#956;</m:mi>
+                                <m:mo>+</m:mo>
+                                <m:mn>1.645</m:mn>
+                                <m:msqrt>
+                                    <m:msup>
+                                        <m:mi>&#963;</m:mi>
+                                        <m:mn>2</m:mn>
+                                    </m:msup>
+                                </m:msqrt>
+                            </m:mrow>
+                        </m:math>
+                    </mathml>
+                    <equation-number>(API-1)</equation-number>
+                </equation-block>
+            </equation-figure>
+            <p>当 <varname>&#963;</varname> 增大时，尾部延迟会显著上升；建议在发布前压测。</p>
+        </section>
+
+        <refbodydiv>
+            <section id="sdk-example">
+                <title>SDK 示例</title>
+                <codeblock outputclass="language-typescript">const client = new FlowClient({ token: process.env.AFE_TOKEN });
+const flow = await client.flows.create({
+  name: 'demo',
+  source: { type: 'dita', path: './content' },
+  dryRun: true,
+});
+console.log(flow.status);</codeblock>
+                <p>类型定义中的 <apiname>FlowClient</apiname> 与 <apiname>flows.create</apiname>
+                    在 <codeph>@acme/flow-sdk</codeph> 中导出。</p>
+            </section>
+        </refbodydiv>
+
+        <section id="related-commands">
+            <title>相关命令</title>
+            <p>命令行等价操作见<xref href="command-reference.dita#command-reference/subcommands">常用子命令</xref>。</p>
+            <p>部署与网络要求见<xref href="architecture.dita">部署架构</xref>。</p>
+        </section>
+    </refbody>
+</reference>

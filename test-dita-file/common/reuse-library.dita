@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="reuse-library" xml:lang="zh-CN">
+    <title>共享内容库</title>
+    <shortdesc>供多个主题通过 conref、conrefend 和 conkeyref 复用的段落、提示与清单。</shortdesc>
+    <prolog>
+        <author>文档团队</author>
+        <metadata>
+            <keywords>
+                <keyword>复用</keyword>
+                <keyword>conref</keyword>
+                <keyword>conkeyref</keyword>
+            </keywords>
+        </metadata>
+    </prolog>
+    <body>
+        <p id="reuse-intro">本段来自共享内容库。它包含由键定义的文本：<ph keyref="product-name"/>
+            <ph keyref="version"/>。如果直接修改这里，所有引用它的主题都会一起变化。</p>
+        <p id="reuse-middle">这一段与上一段、下一段是同级段落，用来验证 <codeph>conrefend</codeph>
+            的连续范围复用。</p>
+        <p id="reuse-end">范围复用的最后一段。它通常不会被单独引用，除非使用 <codeph>conrefend</codeph>。</p>
+
+        <note id="reuse-note" type="tip">共享提示：在发布前运行 <cmdname>flowctl validate</cmdname>，
+            并确认没有未解析的键引用。</note>
+        <note id="reuse-warning" type="warning">共享警告：不要在未备份的情况下删除运行中的数据目录。</note>
+
+        <ul id="reuse-checklist">
+            <li>确认键映射中的 <varname>product-name</varname> 与 <varname>version</varname> 正确。</li>
+            <li>确认条件处理文件 <filepath>common/strict.ditaval</filepath> 可读。</li>
+            <li>确认图片目录 <filepath>images/</filepath> 中的资源存在。</li>
+        </ul>
+
+        <p id="reuse-tip">共享提示：键引用适合放置会随产品版本变化的名称、版本号与支持地址。</p>
+
+        <codeblock id="reuse-command" outputclass="language-bash">flowctl status --json</codeblock>
+
+        <section id="reuse-section">
+            <title>可复用小节</title>
+            <p id="reuse-section-p">这一段位于共享内容库的小节内，用于验证带父级 id 的间接内容引用。</p>
+            <simpletable id="reuse-table">
+                <sthead>
+                    <stentry>字段</stentry>
+                    <stentry>说明</stentry>
+                </sthead>
+                <strow>
+                    <stentry>status</stentry>
+                    <stentry>当前运行状态</stentry>
+                </strow>
+                <strow>
+                    <stentry>version</stentry>
+                    <stentry>引擎版本</stentry>
+                </strow>
+            </simpletable>
+        </section>
+    </body>
+</topic>

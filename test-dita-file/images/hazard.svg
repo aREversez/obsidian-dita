@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120" role="img" aria-labelledby="hazard-title">
+    <title id="hazard-title">警告标志</title>
+    <path d="M60 8 L112 108 L8 108 Z" fill="#ffd84d" stroke="#7a4b00" stroke-width="4" stroke-linejoin="round"/>
+    <rect x="55" y="38" width="10" height="38" rx="4" fill="#3a2500"/>
+    <circle cx="60" cy="91" r="7" fill="#3a2500"/>
+</svg>

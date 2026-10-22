@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE troubleshooting PUBLIC "-//OASIS//DTD DITA Troubleshooting//EN" "troubleshooting.dtd">
+<troubleshooting id="troubleshooting" xml:lang="zh-CN">
+    <title>故障排查</title>
+    <shortdesc>按现象、原因和补救措施排查常见的许可证、启动与超时问题。</shortdesc>
+    <prolog>
+        <author>文档团队</author>
+        <metadata>
+            <keywords>
+                <keyword>故障排查</keyword>
+                <keyword>许可证</keyword>
+                <keyword>超时</keyword>
+            </keywords>
+        </metadata>
+    </prolog>
+    <troublebody>
+        <condition>
+            <p>发布或启动失败，终端出现 <msgph>AFE-<msgnum>1042</msgnum></msgph>、
+                <msgph>AFE-<msgnum>2001</msgnum></msgph> 或超时消息。</p>
+        </condition>
+
+        <troubleSolution id="solution-license">
+            <cause>
+                <p><b>许可证无效或过期。</b> 许可证文件缺失、过期，或与当前主机指纹不匹配。</p>
+                <p><systemoutput>License expired on 2026-09-30</systemoutput></p>
+            </cause>
+            <remedy>
+                <title>更新许可证并重新加载</title>
+                <responsibleParty>许可证管理员或 <ph keyref="support-email"/>。</responsibleParty>
+                <steps>
+                    <step>
+                        <cmd>把新的许可证复制到 <filepath>/etc/afe/license.json</filepath>。</cmd>
+                    </step>
+                    <step>
+                        <cmd>重新加载配置：</cmd>
+                        <info><codeph>flowctl license reload</codeph></info>
+                        <stepresult>终端显示 <systemoutput>license valid until 2027-09-30</systemoutput>。</stepresult>
+                    </step>
+                </steps>
+            </remedy>
+        </troubleSolution>
+
+        <troubleSolution id="solution-startup">
+            <cause>
+                <p><b>启动时提示键未解析。</b> 键映射没有被加载，或键名拼写不一致。</p>
+                <p><systemoutput>Unresolved key: product-name</systemoutput></p>
+            </cause>
+            <remedy>
+                <title>检查键映射</title>
+                <responsibleParty>内容作者或平台管理员 <ph keyref="admin.role"/>。</responsibleParty>
+                <steps-informal>
+                    <p>检查 <filepath>afe.yaml</filepath> 中的 <codeph>keys</codeph> 路径，
+                        并运行 <codeph>flowctl keys check</codeph>。</p>
+                    <p conkeyref="reuse-library/reuse-tip"/>
+                    <p>如果键定义在子映射中，请确认子映射已通过 <codeph>mapref</codeph> 引入。</p>
+                </steps-informal>
+            </remedy>
+        </troubleSolution>
+
+        <troubleSolution id="solution-timeout">
+            <cause>
+                <p><b>发布超时。</b> 上游 API 响应慢，或单次构建主题数过多。</p>
+                <p><systemoutput>request timed out after 30s</systemoutput></p>
+            </cause>
+            <remedy>
+                <title>使用增量构建并提高超时</title>
+                <responsibleParty>运维团队。</responsibleParty>
+                <steps>
+                    <step>
+                        <cmd>运行增量构建并提高超时：</cmd>
+                        <info>
+                            <codeblock outputclass="language-bash">flowctl build --incremental --timeout 120</codeblock>
+                        </info>
+                    </step>
+                    <step>
+                        <cmd>如果仍然超时，请检查网络与<xref
+                            href="architecture.dita#architecture/dependencies">依赖关系</xref>。</cmd>
+                    </step>
+                </steps>
+            </remedy>
+        </troubleSolution>
+
+        <troubleSolution id="solution-escalate">
+            <cause>
+                <p><b>以上步骤均未解决问题。</b> 需要进一步收集信息并升级处理。</p>
+                <note conref="../common/reuse-library.dita#reuse-library/reuse-warning"/>
+            </cause>
+            <remedy>
+                <title>升级处理</title>
+                <responsibleParty>运维团队或 <ph keyref="support-email"/>。</responsibleParty>
+                <steps>
+                    <step>
+                        <cmd>收集日志、版本 <ph keyref="version"/> 与完整错误信息。</cmd>
+                    </step>
+                    <step>
+                        <cmd>联系 <ph keyref="support-email"/> 并附上上述信息。</cmd>
+                    </step>
+                    <step>
+                        <cmd>涉及电源、机架或高温环境时，先阅读<xref href="safety.dita">安全信息</xref>。</cmd>
+                    </step>
+                </steps>
+            </remedy>
+        </troubleSolution>
+    </troublebody>
+    <related-links>
+        <link href="command-reference.dita#command-reference/messages">
+            <linktext>常见消息</linktext>
+        </link>
+        <link href="safety.dita">
+            <linktext>安全信息</linktext>
+        </link>
+    </related-links>
+</troubleshooting>

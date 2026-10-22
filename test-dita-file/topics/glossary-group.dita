@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE glossgroup PUBLIC "-//OASIS//DTD DITA Glossary Group//EN" "glossgroup.dtd">
+<glossgroup id="glossary-group" xml:lang="zh-CN">
+    <title>术语组：并发与一致性</title>
+    <glossentry id="atomicity">
+        <glossterm>原子性</glossterm>
+        <glossdef>一个操作要么全部完成，要么完全不发生，不会留下中间状态。</glossdef>
+        <glossBody>
+            <glossPartOfSpeech value="noun"/>
+            <glossStatus value="approved"/>
+            <glossUsage>发布事务使用原子写入，避免半成品文件。</glossUsage>
+        </glossBody>
+    </glossentry>
+    <glossentry id="consistency">
+        <glossterm>一致性</glossterm>
+        <glossdef>所有读者在同一时间看到相同版本的内容，或按明确规则看到允许的旧版本。</glossdef>
+        <glossBody>
+            <glossPartOfSpeech value="noun"/>
+            <glossStatus value="approved"/>
+            <glossScopeNote>站点发布采用最终一致性；整书输出在单个文件内保持一致。</glossScopeNote>
+        </glossBody>
+    </glossentry>
+    <glossentry id="eventual-consistency">
+        <glossterm>最终一致性</glossterm>
+        <glossdef>更新不会立即传播到所有副本，但在没有新更新时会最终收敛到同一状态。</glossdef>
+        <glossBody>
+            <glossPartOfSpeech value="noun"/>
+            <glossStatus value="approved"/>
+            <glossUsage>CDN 缓存失效存在延迟时，读者可能短暂看到旧页面。</glossUsage>
+        </glossBody>
+        <related-links>
+            <link href="glossary-term.dita">
+                <linktext>幂等性</linktext>
+            </link>
+        </related-links>
+    </glossentry>
+</glossgroup>

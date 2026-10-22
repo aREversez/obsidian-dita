@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="release-notes" xml:lang="zh-CN">
+    <title>版本说明 2.4</title>
+    <shortdesc><ph keyref="product-name"/> <ph keyref="version"/> 的新增功能、行为变化与已知问题。</shortdesc>
+    <prolog>
+        <author>文档团队</author>
+        <metadata>
+            <keywords>
+                <keyword>版本说明</keyword>
+                <keyword>发行说明</keyword>
+                <keyword>2.4</keyword>
+            </keywords>
+        </metadata>
+    </prolog>
+    <body>
+        <p>本版本面向 <ph keyref="admin.role"/>、内容作者和集成开发者。升级前请阅读
+            <xref href="install-cli.dita">安装说明</xref>与<xref href="safety.dita">安全信息</xref>。</p>
+
+        <section id="new">
+            <title>新增</title>
+            <ul>
+                <li>站点视图支持跨主题锚点跳转。</li>
+                <li>整书视图会合并 bookmap 的章节、部分与附录标签。</li>
+                <li>键空间支持 <codeph>keyscope</codeph> 限定名。</li>
+                <li>MathML 渲染支持带前缀与 <codeph>mfenced</codeph> 的输入。</li>
+            </ul>
+        </section>
+
+        <section id="changes">
+            <title>行为变化</title>
+            <table id="change-table">
+                <title>2.4 行为变化</title>
+                <tgroup cols="4">
+                    <colspec colname="ch1" colnum="1"/>
+                    <colspec colname="ch2" colnum="2"/>
+                    <colspec colname="ch3" colnum="3"/>
+                    <colspec colname="ch4" colnum="4"/>
+                    <thead>
+                        <row>
+                            <entry>范围</entry>
+                            <entry>旧行为</entry>
+                            <entry>新行为</entry>
+                            <entry>影响</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry>链接</entry>
+                            <entry>跨主题链接打开新文件。</entry>
+                            <entry>站点内切换页面并滚动到锚点。</entry>
+                            <entry>阅读更连续。</entry>
+                        </row>
+                        <row>
+                            <entry>键</entry>
+                            <entry>只支持裸键名。</entry>
+                            <entry>支持限定名与作用域。</entry>
+                            <entry>多产品共存更安全。</entry>
+                        </row>
+                        <row audience="internal" props="internal-only">
+                            <entry>内部构建</entry>
+                            <entry>手动排除内部内容。</entry>
+                            <entry>由 ditaval 统一过滤。</entry>
+                            <entry>减少漏发风险。</entry>
+                        </row>
+                        <row platform="windows">
+                            <entry>路径</entry>
+                            <entry>不支持长路径。</entry>
+                            <entry>启用长路径感知。</entry>
+                            <entry>减少构建失败。</entry>
+                        </row>
+                        <row product="legacy" otherprops="beta">
+                            <entry>兼容模式</entry>
+                            <entry>默认开启。</entry>
+                            <entry>默认关闭，需显式启用。</entry>
+                            <entry>迁移前请验证。</entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table>
+        </section>
+
+        <section id="profiling">
+            <title>条件内容示例</title>
+            <p audience="admin">管理员内容：可以在设置中调整键作用域。</p>
+            <p audience="developer">开发者内容：SDK 新增 <apiname>flows.validate</apiname>。</p>
+            <p audience="internal" props="internal-only">内部内容：此段只应出现在内部构建中。</p>
+            <p platform="linux">Linux 内容：推荐使用 systemd 管理服务。</p>
+            <p platform="windows">Windows 内容：推荐使用服务管理器。</p>
+            <p product="legacy">旧产品内容：仅适用于 1.x 数据模型。</p>
+            <p otherprops="beta">Beta 内容：此功能可能在后续版本调整。</p>
+            <p importance="high" status="changed">高重要性变更：升级前请备份键映射。</p>
+        </section>
+
+        <section id="known-issues">
+            <title>已知问题</title>
+            <note type="warning">条件过滤尚未在 Obsidian 预览中执行；当前只高亮条件属性，
+                发布器才会真正过滤。</note>
+            <note type="tip">如果站点侧边栏没有显示某个条目，请确认映射中的
+                <codeph>processing-role</codeph> 不是 <codeph>resource-only</codeph>。</note>
+            <p>问题编号 <msgnum>2418</msgnum>：极长的表格在窄窗口中会横向滚动。</p>
+        </section>
+
+        <section id="metadata">
+            <title>构建元数据</title>
+            <p>构建日期：<data name="build-date" value="2026-10-22"/>2026-10-22。渠道：
+                <data name="channel" value="stable"/>stable。</p>
+            <indexterm>版本说明</indexterm>
+            <indexterm>条件处理</indexterm>
+            <draft-comment author="reviewer">发布前确认 <codeph>version</codeph> 键已更新。</draft-comment>
+            <required-cleanup remap="检查版本号">这段文字仅用于作者检查。</required-cleanup>
+        </section>
+
+        <section id="links">
+            <title>相关链接</title>
+            <p>命令行变化见<xref href="command-reference.dita#command-reference/subcommands">常用子命令</xref>；
+                接口变化见<xref href="api-reference.dita">API 参考</xref>。</p>
+            <p>共享清单：</p>
+            <ul conkeyref="reuse-library/reuse-checklist">
+                <li>占位条目：共享清单会替换整个列表。</li>
+            </ul>
+        </section>
+    </body>
+</topic>

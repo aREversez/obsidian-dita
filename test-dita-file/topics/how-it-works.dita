@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="how-it-works" xml:lang="zh-CN">
+    <title>工作原理</title>
+    <shortdesc>引擎把输入拆成可复用的主题树，再按映射、键空间和条件属性组装为输出。</shortdesc>
+    <prolog>
+        <author>文档团队</author>
+        <metadata>
+            <keywords>
+                <keyword>工作原理</keyword>
+                <keyword>解析</keyword>
+                <keyword>渲染</keyword>
+            </keywords>
+        </metadata>
+    </prolog>
+    <conbody>
+        <p>一次发布大致分为四个阶段：<b>采集</b>、<b>解析</b>、<b>渲染</b>和<b>发布</b>。
+            每个阶段都可以单独运行，便于定位问题。</p>
+
+        <section id="ingest">
+            <title>采集</title>
+            <p>采集器读取文件、API 响应或消息队列中的内容，并记录来源路径。图片、键映射和
+                ditaval 也在这里被登记为依赖。</p>
+            <ul>
+                <li>文件连接器：递归读取 <filepath>content/</filepath>。</li>
+                <li>API 连接器：按分页拉取远程内容。</li>
+                <li>消息连接器：消费变更事件并触发增量构建。</li>
+            </ul>
+        </section>
+
+        <section id="parse">
+            <title>解析</title>
+            <p>解析器把 XML 转换为带源位置的树。它识别主题类型、<codeph>class</codeph> 属性、
+                <codeph>conref</codeph>、<codeph>conkeyref</codeph>、<codeph>keyref</codeph>
+                与条件属性。</p>
+            <p>解析吞吐量可以近似表示为
+                <equation-inline>
+                    <mathml>
+                        <m:math xmlns:m="http://www.w3.org/1998/Math/MathML">
+                            <m:mrow>
+                                <m:mi>Q</m:mi>
+                                <m:mo>=</m:mo>
+                                <m:mfrac>
+                                    <m:mi>N</m:mi>
+                                    <m:mi>t</m:mi>
+                                </m:mfrac>
+                            </m:mrow>
+                        </m:math>
+                    </mathml>
+                </equation-inline>
+                ，其中 <varname>N</varname> 是主题数，<varname>t</varname> 是耗时。</p>
+        </section>
+
+        <conbodydiv>
+            <section id="render">
+                <title>渲染</title>
+                <p>下面的区块使用 <codeph>conbodydiv</codeph> 组织相关内容。渲染器根据基础类型
+                    选择 HTML 结构。标题层级、表格、代码块、图片、MathML 与交叉引用都在这一阶段确定。</p>
+                <fig id="architecture-figure">
+                    <title>分层架构</title>
+                    <image href="../images/architecture.svg" placement="break" scale="80">
+                        <alt>采集、解析、渲染和发布四层架构。</alt>
+                    </image>
+                </fig>
+            </section>
+        </conbodydiv>
+
+        <section id="publish">
+            <title>发布</title>
+            <p>发布器把渲染结果写入目标目录，并生成导航、搜索索引和资源清单。对于站点输出，
+                每个主题是一页；对于整书输出，所有主题按映射顺序合并。</p>
+            <note type="important">发布目录中的 <filepath>manifest.json</filepath> 记录了输入文件与
+                哈希值，可用于增量构建。</note>
+        </section>
+
+        <section id="math-block">
+            <title>块级公式</title>
+            <p>延迟模型使用下面的公式估算第 95 百分位响应时间：</p>
+            <equation-block>
+                <mathml>
+                    <m:math xmlns:m="http://www.w3.org/1998/Math/MathML">
+                        <m:mrow>
+                            <m:msub>
+                                <m:mi>L</m:mi>
+                                <m:mn>95</m:mn>
+                            </m:msub>
+                            <m:mo>=</m:mo>
+                            <m:mi>&#956;</m:mi>
+                            <m:mo>+</m:mo>
+                            <m:mn>1.645</m:mn>
+                            <m:mi>&#963;</m:mi>
+                        </m:mrow>
+                    </m:math>
+                </mathml>
+                <equation-number>(1)</equation-number>
+            </equation-block>
+            <p>其中 <varname>&#956;</varname> 是平均延迟，<varname>&#963;</varname> 是标准差。</p>
+        </section>
+    </conbody>
+    <related-links>
+        <link href="architecture.dita">
+            <linktext>部署架构</linktext>
+        </link>
+        <link href="api-reference.dita">
+            <linktext>API 参考</linktext>
+        </link>
+    </related-links>
+</concept>

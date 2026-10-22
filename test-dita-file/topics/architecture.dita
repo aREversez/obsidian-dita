@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA Concept//EN" "concept.dtd">
+<concept id="architecture" xml:lang="zh-CN">
+    <title>部署架构</title>
+    <shortdesc>介绍单机、集群和托管三种部署方式，以及各层之间的依赖关系。</shortdesc>
+    <conbody>
+        <p>下图展示四层架构与可点击的热点区域。热点使用 <codeph>imagemap</codeph> 与
+            <codeph>area</codeph> 定义。</p>
+
+        <p id="arch-fig"><b>部署架构与热点。</b> 从上到下依次为采集、解析、渲染和发布四层。</p>
+        <imagemap id="arch-imagemap">
+            <image href="../images/architecture.svg" alt="Acme Flow Engine 分层架构">
+                <alt>从上到下依次为采集、解析、渲染和发布四层。</alt>
+            </image>
+            <area>
+                <shape>rect</shape>
+                <coords>48,42,592,98</coords>
+                <xref href="how-it-works.dita#how-it-works/ingest">采集层说明</xref>
+            </area>
+            <area>
+                <shape>rect</shape>
+                <coords>48,122,592,178</coords>
+                <xref href="how-it-works.dita#how-it-works/parse">解析层说明</xref>
+            </area>
+            <area>
+                <shape>rect</shape>
+                <coords>48,202,592,258</coords>
+                <xref href="how-it-works.dita#how-it-works/render">渲染层说明</xref>
+            </area>
+            <area>
+                <shape>rect</shape>
+                <coords>48,282,592,338</coords>
+                <xref href="how-it-works.dita#how-it-works/publish">发布层说明</xref>
+            </area>
+        </imagemap>
+
+        <section id="modes">
+            <title>部署方式</title>
+            <table id="deployment-modes">
+                <title>三种部署方式</title>
+                <tgroup cols="4">
+                    <colspec colname="d1" colnum="1"/>
+                    <colspec colname="d2" colnum="2"/>
+                    <colspec colname="d3" colnum="3"/>
+                    <colspec colname="d4" colnum="4"/>
+                    <thead>
+                        <row>
+                            <entry>方式</entry>
+                            <entry>适用规模</entry>
+                            <entry>高可用</entry>
+                            <entry>备注</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry>单机</entry>
+                            <entry>小于 10 万主题</entry>
+                            <entry>否</entry>
+                            <entry>最简单，适合本地预览。</entry>
+                        </row>
+                        <row>
+                            <entry morerows="1">集群</entry>
+                            <entry namest="d2" nameend="d3">中大型团队</entry>
+                            <entry>共享对象存储</entry>
+                        </row>
+                        <row>
+                            <entry>多副本</entry>
+                            <entry>是，按队列扩展</entry>
+                            <entry>无</entry>
+                        </row>
+                        <row>
+                            <entry>托管</entry>
+                            <entry>按需</entry>
+                            <entry>是</entry>
+                            <entry>由服务商维护升级。</entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table>
+        </section>
+
+        <section id="dependencies">
+            <title>依赖关系</title>
+            <dl>
+                <dlentry>
+                    <dt>解析层</dt>
+                    <dd>依赖键映射与主题文件；不依赖渲染主题。</dd>
+                </dlentry>
+                <dlentry>
+                    <dt>渲染层</dt>
+                    <dd>依赖解析结果、图片与字体；可独立替换主题样式。</dd>
+                </dlentry>
+                <dlentry>
+                    <dt>发布层</dt>
+                    <dd>依赖渲染结果与目标存储；失败时可重试。</dd>
+                </dlentry>
+            </dl>
+            <note conref="../common/reuse-library.dita#reuse-library/reuse-warning"/>
+            <p>安全注意事项见<xref href="safety.dita">安全信息</xref>。</p>
+        </section>
+
+        <section id="conditions">
+            <title>环境差异</title>
+            <p platform="linux">Linux 集群使用 <filepath>/var/lib/afe</filepath> 作为数据目录。</p>
+            <p platform="windows">Windows 单机使用 <filepath>C:\ProgramData\AFE</filepath> 作为数据目录。</p>
+            <p product="legacy" otherprops="beta">旧版兼容模式仅用于迁移验证。</p>
+        </section>
+    </conbody>
+    <related-links>
+        <link href="getting-started.dita">
+            <linktext>快速开始</linktext>
+        </link>
+        <link href="safety.dita">
+            <linktext>安全信息</linktext>
+        </link>
+    </related-links>
+</concept>

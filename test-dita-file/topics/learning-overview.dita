@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE learningOverview PUBLIC "-//OASIS//DTD DITA Learning Overview//EN" "learningOverview.dtd">
+<learningOverview id="learning-overview" xml:lang="zh-CN"
+    class="- topic/topic learningOverview/learningOverview ">
+    <title>学习路径：从采集到发布</title>
+    <shortdesc>一条面向新成员的学习路径，覆盖内容采集、DITA 解析、渲染与发布。</shortdesc>
+    <learningOverviewbody class="- topic/body learningOverview/learningOverviewbody ">
+        <lcIntro class="- topic/section learningOverview/lcIntro ">
+            <title>课程简介</title>
+            <p>这条路径假设你已经安装 <ph keyref="product-name"/>，并拥有一个可用的键映射。
+                每个阶段都包含阅读材料和一个可选的练习。</p>
+        </lcIntro>
+
+        <lcObjectives class="- topic/section learningOverview/lcObjectives ">
+            <title>学习目标</title>
+            <lcObjectivesStem>完成本路径后，你应能够：</lcObjectivesStem>
+            <lcObjectivesGroup>
+                <lcObjective>解释采集、解析、渲染与发布的分工。</lcObjective>
+                <lcObjective>使用共享内容与键引用减少重复。</lcObjective>
+                <lcObjective>定位常见的引用与条件处理问题。</lcObjective>
+            </lcObjectivesGroup>
+        </lcObjectives>
+
+        <section id="modules">
+            <title>模块</title>
+            <simpletable>
+                <sthead>
+                    <stentry>模块</stentry>
+                    <stentry>阅读</stentry>
+                    <stentry>练习</stentry>
+                </sthead>
+                <strow>
+                    <stentry>基础</stentry>
+                    <stentry><xref href="overview.dita">产品概览</xref></stentry>
+                    <stentry>画出一张数据流图</stentry>
+                </strow>
+                <strow>
+                    <stentry>安装</stentry>
+                    <stentry><xref href="install-cli.dita">安装命令行工具</xref></stentry>
+                    <stentry>验证 <ph>flowctl</ph> 版本</stentry>
+                </strow>
+                <strow>
+                    <stentry>发布</stentry>
+                    <stentry><xref href="getting-started.dita">快速开始</xref></stentry>
+                    <stentry>生成一个站点</stentry>
+                </strow>
+                <strow>
+                    <stentry>排错</stentry>
+                    <stentry><xref href="troubleshooting.dita">故障排查</xref></stentry>
+                    <stentry>修复一个未解析的键</stentry>
+                </strow>
+            </simpletable>
+        </section>
+
+        <section id="assessment">
+            <title>自测</title>
+            <p>完成路径后，尝试回答：</p>
+            <ol>
+                <li>为什么共享内容库不应直接出现在站点导航中？</li>
+                <li><ph>conkeyref</ph> 与 <ph>keyref</ph> 的区别是什么？</li>
+                <li>条件属性在预览与发布阶段分别如何处理？</li>
+            </ol>
+            <note type="tip">参考答案散落在<xref href="how-it-works.dita">工作原理</xref>与
+                <xref href="release-notes.dita#release-notes/known-issues">已知问题</xref>中。</note>
+        </section>
+    </learningOverviewbody>
+</learningOverview>

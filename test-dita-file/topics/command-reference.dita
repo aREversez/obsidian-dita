@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE reference PUBLIC "-//OASIS//DTD DITA Reference//EN" "reference.dtd">
+<reference id="command-reference" xml:lang="zh-CN">
+    <title>flowctl 命令参考</title>
+    <shortdesc>flowctl 的语法、全局选项、退出码与常用子命令。</shortdesc>
+    <prolog>
+        <author>文档团队</author>
+        <metadata>
+            <keywords>
+                <keyword>命令参考</keyword>
+                <keyword>flowctl</keyword>
+                <keyword>退出码</keyword>
+            </keywords>
+        </metadata>
+    </prolog>
+    <refbody>
+        <refsyn>
+            <title>语法</title>
+            <p><synph><kwd>flowctl</kwd> <oper>&lt;command&gt;</oper> [<var>options</var>] [<var>arguments</var>]</synph></p>
+            <p>不带参数运行 <cmdname>flowctl</cmdname> 会显示简短帮助。使用
+                <codeph>flowctl help &lt;command&gt;</codeph> 查看子命令详情。</p>
+        </refsyn>
+
+        <section id="global-options">
+            <title>全局选项</title>
+            <parml>
+                <plentry>
+                    <pt><option>--config</option> <parmname>path</parmname></pt>
+                    <pd>指定配置文件，默认 <filepath>./afe.yaml</filepath>。</pd>
+                </plentry>
+                <plentry>
+                    <pt><option>--verbose</option></pt>
+                    <pd>输出详细日志，包括解析和复用决策。</pd>
+                </plentry>
+                <plentry>
+                    <pt><option>--json</option></pt>
+                    <pd>以 JSON 输出结果，便于脚本处理。</pd>
+                </plentry>
+                <plentry>
+                    <pt><option>--no-color</option></pt>
+                    <pd>禁用终端颜色，适合写入日志文件。</pd>
+                </plentry>
+            </parml>
+        </section>
+
+        <section id="subcommands">
+            <title>常用子命令</title>
+            <dl>
+                <dlentry>
+                    <dt><cmdname>init</cmdname></dt>
+                    <dd>创建配置、内容目录与共享文件骨架。</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><cmdname>validate</cmdname></dt>
+                    <dd>检查 XML、引用、id、键与图片；<option>--strict</option> 会把警告视为错误。</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><cmdname>build</cmdname></dt>
+                    <dd>生成站点、整书或 PDF。使用 <option>--watch</option> 持续监听变更。</dd>
+                </dlentry>
+                <dlentry>
+                    <dt><cmdname>keys</cmdname></dt>
+                    <dd>列出、检查或比较键定义。子命令包括 <cmdname>list</cmdname> 与
+                        <cmdname>check</cmdname>。</dd>
+                </dlentry>
+            </dl>
+            <codeblock outputclass="language-bash">flowctl build --site --output ./public
+flowctl build --book --output ./book.html
+flowctl keys list --json</codeblock>
+        </section>
+
+        <properties id="command-properties">
+            <prophead>
+                <proptypehd>类型</proptypehd>
+                <propvaluehd>值</propvaluehd>
+                <propdeschd>说明</propdeschd>
+            </prophead>
+            <property>
+                <proptype>string</proptype>
+                <propvalue>site | book | pdf</propvalue>
+                <propdesc>输出格式；可以重复指定。</propdesc>
+            </property>
+            <property>
+                <proptype>path</proptype>
+                <propvalue>./public</propvalue>
+                <propdesc>输出目录，相对配置文件所在目录。</propdesc>
+            </property>
+            <property>
+                <proptype>boolean</proptype>
+                <propvalue>true | false</propvalue>
+                <propdesc>是否在构建前清理旧文件。</propdesc>
+            </property>
+        </properties>
+
+        <section id="exit-codes">
+            <title>退出码</title>
+            <table id="exit-code-table">
+                <title>退出码与含义</title>
+                <tgroup cols="4">
+                    <colspec colname="e1" colnum="1"/>
+                    <colspec colname="e2" colnum="2"/>
+                    <colspec colname="e3" colnum="3"/>
+                    <colspec colname="e4" colnum="4"/>
+                    <thead>
+                        <row>
+                            <entry>退出码</entry>
+                            <entry>类别</entry>
+                            <entry>含义</entry>
+                            <entry>处理建议</entry>
+                        </row>
+                    </thead>
+                    <tbody>
+                        <row>
+                            <entry>0</entry>
+                            <entry>成功</entry>
+                            <entry>没有错误或严格模式警告。</entry>
+                            <entry>无需处理。</entry>
+                        </row>
+                        <row>
+                            <entry morerows="1">1</entry>
+                            <entry namest="e2" nameend="e3">配置或内容错误</entry>
+                            <entry>查看诊断与 <codeph>--verbose</codeph> 日志。</entry>
+                        </row>
+                        <row>
+                            <entry>缺少必填项</entry>
+                            <entry>补全 <codeph>afe.yaml</codeph>。</entry>
+                        </row>
+                        <row>
+                            <entry>2</entry>
+                            <entry>环境</entry>
+                            <entry>无法读取输入或写入输出。</entry>
+                            <entry>检查权限与磁盘空间。</entry>
+                        </row>
+                    </tbody>
+                </tgroup>
+            </table>
+        </section>
+
+        <refbodydiv>
+            <section id="script-example">
+                <title>脚本示例</title>
+                <codeblock outputclass="language-bash">#!/usr/bin/env bash
+set -euo pipefail
+flowctl validate --strict
+flowctl build --site --output ./public</codeblock>
+                <note type="tip">在 CI 中使用 <option>--json</option> 与 <option>--no-color</option>，
+                    便于收集结构化结果。</note>
+            </section>
+        </refbodydiv>
+
+        <section id="messages">
+            <title>常见消息</title>
+            <p>消息格式为 <msgph>AFE-<msgnum>1042</msgnum></msgph>。示例：</p>
+            <msgblock>AFE-1042  Unresolved key: product-name
+AFE-2001  Image not found: images/flow.svg</msgblock>
+            <p>更多错误说明见<xref href="troubleshooting.dita">故障排查</xref>。</p>
+        </section>
+    </refbody>
+    <related-links>
+        <link href="api-reference.dita">
+            <linktext>API 参考</linktext>
+        </link>
+        <link href="getting-started.dita">
+            <linktext>快速开始</linktext>
+        </link>
+    </related-links>
+</reference>

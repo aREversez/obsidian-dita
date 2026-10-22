@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE task PUBLIC "-//OASIS//DTD DITA Task//EN" "task.dtd">
+<task id="getting-started" xml:lang="zh-CN">
+    <title>快速开始</title>
+    <shortdesc>从空目录开始，创建第一个可发布的流程，并验证键、复用与图片都能正确解析。</shortdesc>
+    <prolog>
+        <author>文档团队</author>
+        <metadata>
+            <keywords>
+                <keyword>快速开始</keyword>
+                <keyword>任务</keyword>
+                <keyword>发布</keyword>
+            </keywords>
+        </metadata>
+    </prolog>
+    <taskbody>
+        <prereq>
+            <p>开始前，请确认已经安装 <ph keyref="product-name"/> <ph keyref="version"/>，
+                并拥有 <ph keyref="admin.role"/> 权限。</p>
+            <ul conkeyref="reuse-library/reuse-checklist">
+                <li>占位条目：共享清单会替换整个列表。</li>
+            </ul>
+        </prereq>
+
+        <context>
+            <p>本任务创建一个名为 <varname>demo</varname> 的流程，并输出到
+                <filepath>./public</filepath>。所有命令都在项目根目录执行。</p>
+            <p>如果不确定配置是否正确，可以先阅读<xref href="how-it-works.dita">工作原理</xref>，
+                或直接使用下面的检查步骤。</p>
+        </context>
+
+        <steps>
+            <step id="step-init">
+                <cmd>打开终端，进入项目目录并初始化配置：</cmd>
+                <info>
+                    <codeblock outputclass="language-bash">flowctl init --name demo --keys common/keys.ditamap</codeblock>
+                </info>
+                <stepresult>命令创建 <filepath>afe.yaml</filepath> 与
+                    <filepath>content/</filepath> 目录。</stepresult>
+            </step>
+
+            <step id="step-source">
+                <cmd>选择内容来源：</cmd>
+                <choices>
+                    <choice>使用本地 DITA 文件。</choice>
+                    <choice>连接远程 API。</choice>
+                    <choice>从消息队列订阅变更。</choice>
+                </choices>
+                <choicetable>
+                    <chhead>
+                        <choptionhd>来源</choptionhd>
+                        <chdeschd>适用场景</chdeschd>
+                    </chhead>
+                    <chrow>
+                        <choption>本地文件</choption>
+                        <chdesc>离线编辑、审阅与小规模发布。</chdesc>
+                    </chrow>
+                    <chrow>
+                        <choption>远程 API</choption>
+                        <chdesc>内容由其他系统统一管理。</chdesc>
+                    </chrow>
+                    <chrow>
+                        <choption>消息队列</choption>
+                        <chdesc>需要增量构建和自动触发。</chdesc>
+                    </chrow>
+                </choicetable>
+            </step>
+
+            <step id="step-validate">
+                <cmd>运行验证，确认引用、id 与图片路径都有效：</cmd>
+                <info>
+                    <p>验证器会读取 <filepath>afe.yaml</filepath> 中的键映射与 ditaval。</p>
+                </info>
+                <substeps>
+                    <substep>
+                        <cmd>检查键映射：</cmd>
+                        <info><codeph>flowctl keys check</codeph></info>
+                    </substep>
+                    <substep>
+                        <cmd>检查图片与交叉引用：</cmd>
+                        <info><codeph>flowctl validate --strict</codeph></info>
+                    </substep>
+                </substeps>
+                <stepxmp>
+                    <screen>$ flowctl validate --strict
+validated 14 topics, 0 errors</screen>
+                </stepxmp>
+                <stepresult>终端显示 <systemoutput>0 errors</systemoutput>。</stepresult>
+                <steptroubleshooting>
+                    <p>如果出现未解析的键，请检查 <filepath>common/keys.ditamap</filepath>，
+                        或参考<xref keyref="troubleshooting-topic"/>。</p>
+                </steptroubleshooting>
+            </step>
+
+            <step id="step-publish">
+                <cmd>发布站点：</cmd>
+                <info>
+                    <codeblock conkeyref="reuse-library/reuse-command"/>
+                </info>
+                <stepresult>在 <filepath>./public</filepath> 中生成 HTML、导航与资源清单。</stepresult>
+            </step>
+        </steps>
+
+        <result>
+            <p>浏览器打开 <filepath>./public/index.html</filepath> 后，应能看到带侧边栏的站点，
+                并且产品名显示为 <ph keyref="product-name"/>。</p>
+        </result>
+
+        <tasktroubleshooting>
+            <p>如果页面没有样式，请确认 <filepath>public/assets/</filepath> 已完整复制。
+                图片缺失时，检查 <filepath>images/</filepath> 是否在输入目录内。</p>
+        </tasktroubleshooting>
+
+        <example>
+            <title>最小配置</title>
+            <codeblock outputclass="language-yaml">name: demo
+source: ./content
+output: ./public
+keys: ./common/keys.ditamap
+ditaval: ./common/strict.ditaval</codeblock>
+        </example>
+
+        <postreq>
+            <p>完成后，建议阅读<xref href="command-reference.dita">命令参考</xref>，
+                了解增量构建与条件过滤。</p>
+        </postreq>
+    </taskbody>
+    <related-links>
+        <link href="install-cli.dita">
+            <linktext>安装命令行工具</linktext>
+        </link>
+        <link href="overview.dita#overview/flow">
+            <linktext>查看数据流</linktext>
+        </link>
+    </related-links>
+</task>

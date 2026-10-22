@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE task PUBLIC "-//OASIS//DTD DITA Task//EN" "task.dtd">
+<task id="install-cli" xml:lang="zh-CN">
+    <title>安装命令行工具</title>
+    <shortdesc>在 Linux、macOS 或 Windows 上安装 flowctl，并完成最小权限配置。</shortdesc>
+    <prolog>
+        <author>文档团队</author>
+        <metadata>
+            <keywords>
+                <keyword>安装</keyword>
+                <keyword>命令行</keyword>
+                <keyword>flowctl</keyword>
+            </keywords>
+        </metadata>
+    </prolog>
+    <taskbody>
+        <prereq>
+            <p>开始前，请确认以下条件：</p>
+            <ul>
+                <li>拥有安装目录的写权限，并能修改系统 PATH。</li>
+                <li>由运维人员执行，熟悉命令行与文件权限。</li>
+                <li>需要安装包或网络访问权限，但不需要额外硬件与备件。</li>
+                <li>本任务不涉及危险操作。</li>
+            </ul>
+            <p>预计用时 10 分钟。</p>
+        </prereq>
+
+        <context>
+            <p>安装包已包含 <cmdname>flowctl</cmdname>、默认主题和校验工具。安装后，
+                <cmdname>flowctl</cmdname> 应能在任意目录运行。</p>
+            <p>当前用户需要 <ph keyref="admin.role"/> 或等效权限。</p>
+            <p conkeyref="reuse-library/reuse-tip"/>
+        </context>
+
+        <steps>
+            <step id="download">
+                <cmd>下载与当前版本对应的安装包：</cmd>
+                <info>
+                    <p>版本号为 <ph keyref="version"/>。支持的平台包括 Linux、macOS 和 Windows。</p>
+                </info>
+                <stepresult>得到 <filepath>flowctl-2.4.zip</filepath>。</stepresult>
+            </step>
+
+            <step id="unpack">
+                <cmd>解压到安装目录：</cmd>
+                <info platform="linux">
+                    <codeblock outputclass="language-bash">sudo unzip flowctl-2.4.zip -d /opt/afe
+sudo ln -s /opt/afe/flowctl /usr/local/bin/flowctl</codeblock>
+                </info>
+                <info platform="windows">
+                    <codeblock outputclass="language-powershell">Expand-Archive .\flowctl-2.4.zip -DestinationPath C:\ProgramData\AFE
+[Environment]::SetEnvironmentVariable('Path', $env:Path + ';C:\ProgramData\AFE', 'Machine')</codeblock>
+                </info>
+            </step>
+
+            <step id="verify">
+                <cmd>验证安装：</cmd>
+                <info>
+                    <codeblock conkeyref="reuse-library/reuse-command"/>
+                </info>
+                <stepxmp>
+                    <screen>$ flowctl --version
+flowctl 2.4.0 (Acme Flow Engine)</screen>
+                </stepxmp>
+                <stepresult>输出版本号 <systemoutput>2.4.0</systemoutput>。</stepresult>
+            </step>
+
+            <step id="profile">
+                <cmd>配置默认键映射与条件文件：</cmd>
+                <info>
+                    <p>把 <filepath>common/keys.ditamap</filepath> 与
+                        <filepath>common/strict.ditaval</filepath> 复制到项目目录，然后在
+                        <filepath>afe.yaml</filepath> 中引用它们。</p>
+                </info>
+                <stepresult>后续发布自动使用共享键与条件规则。</stepresult>
+            </step>
+        </steps>
+
+        <result>
+            <p>命令 <cmdname>flowctl</cmdname> 可用，且 <codeph>flowctl keys check</codeph>
+                能读取共享键映射。</p>
+        </result>
+
+        <postreq>
+            <p>继续阅读<xref href="getting-started.dita">快速开始</xref>创建第一个流程。</p>
+            <p>安装完成后无需额外清理；如果不再使用，请删除安装目录与 PATH 条目。</p>
+        </postreq>
+    </taskbody>
+</task>
