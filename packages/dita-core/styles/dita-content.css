@@ -999,6 +999,13 @@ section, .example { margin: 1.5rem 0; }
 
 /* ── Site view: one topic per page, with a host-rendered sidebar ── */
 
+/* One page beside a sidebar is not a full-pane reading page: start it at the
+   same top padding as the host's sidebar header instead of the 2rem reading
+   padding on .dita-body, so the page and sidebar line up. */
+.dita-body.dita-body--site {
+  padding-top: 0.75rem;
+}
+
 .dita-site-page {
   padding: 0 0.5rem;
 }

@@ -347,6 +347,9 @@ export class DitaView extends TextFileView {
   private applyMode(): void {
     const panes = panesFor(this.mode);
     this.container.dataset.mode = this.mode;
+    // A site page sits beside its sidebar, so it takes the sidebar header's
+    // top padding instead of the full-pane reading padding.
+    this.body?.classList.toggle('dita-body--site', this.mode === 'site');
     setIcon(this.modeAction, MODE_ICONS[this.mode]);
     this.modeAction.setAttribute('aria-label', MODE_LABELS[this.mode]);
     this.sitePrevAction.style.display = this.mode === 'site' ? '' : 'none';
