@@ -20,6 +20,8 @@ import { readSourceText } from './editor/sourceText';
 import { renderTopicXml } from './editor/topicRender';
 import { collectMapEntries, getMapTitleText } from './render/mapTypeMap';
 import type { MapEntry, RoleLabelFormatter } from './render/mapTypeMap';
+import { pruneExcluded } from './profiling';
+import type { ProfileFilter } from './profiling';
 
 export interface BookXmlRenderInput {
   /** The map's source text. */
@@ -52,6 +54,13 @@ export interface BookXmlRenderInput {
   toResourceUrl?: (absPath: string) => string;
   /** Receives the absolute path of every map and topic file read. */
   collectDependencies?: Set<string>;
+  /**
+   * Conditional processing: map entries the filter leaves out (a topicref with
+   * `audience="internal"`, say) are dropped, with their sub-entries, before
+   * anything is rendered. Profiled content inside a topic is not touched here;
+   * it carries data-profile-keys for the host to hide.
+   */
+  filter?: ProfileFilter;
   /**
    * Reads a topic file. Defaults to readSourceText; injectable so tests can
    * render without touching the disk.
@@ -117,6 +126,7 @@ export function renderBookXml(input: BookXmlRenderInput): BookXmlRenderResult {
     return readFile(path);
   };
   expandDitamapRefs(doc.root, input.docDir, read);
+  pruneExcluded(doc.root, input.filter);
 
   const keyMap = input.keyMap ?? new Map<string, string>();
   const resolveKey = (key: string): string | undefined => keyMap.get(key);

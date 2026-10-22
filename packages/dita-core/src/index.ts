@@ -28,6 +28,20 @@ export { renderBookXml } from './bookRender';
 export type { BookXmlRenderInput, BookXmlRenderResult } from './bookRender';
 export { renderSiteXml } from './siteRender';
 export type { SiteNavEntry, SiteXmlRenderInput, SiteXmlRenderResult } from './siteRender';
+export {
+  PROFILE_ATTRS,
+  ditavalAction,
+  isEmptyFilter,
+  isExcluded,
+  isValueExcluded,
+  parseDitaval,
+  profileGroups,
+  profileKey,
+  profileValuesOf,
+  profileValuesOfKeys,
+  pruneExcluded,
+} from './profiling';
+export type { Ditaval, DitavalAction, DitavalRule, ProfileFilter, ProfileGroup, ProfileValues } from './profiling';
 export { collectMapEntries, getMapTitleText } from './render/mapTypeMap';
 export type { MapEntry } from './render/mapTypeMap';
 export type { RoleLabelFormatter, RoleLabelInfo } from './render/mapTypeMap';

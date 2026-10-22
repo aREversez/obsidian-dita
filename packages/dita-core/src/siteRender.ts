@@ -23,6 +23,7 @@ import { readSourceText } from './editor/sourceText';
 import { renderTopicXml } from './editor/topicRender';
 import { collectMapEntries, getMapTitleText } from './render/mapTypeMap';
 import { topicPathOf } from './bookRender';
+import { pruneExcluded } from './profiling';
 import type { BookXmlRenderInput } from './bookRender';
 
 export interface SiteXmlRenderInput extends Omit<BookXmlRenderInput, 'labels' | 'headingLevel'> {
@@ -242,6 +243,7 @@ export function renderSiteXml(input: SiteXmlRenderInput): SiteXmlRenderResult {
     return readFile(path);
   };
   expandDitamapRefs(doc.root, input.docDir, read);
+  pruneExcluded(doc.root, input.filter);
 
   const keyMap = input.keyMap ?? new Map<string, string>();
   const resolveKey = (key: string): string | undefined => keyMap.get(key);
