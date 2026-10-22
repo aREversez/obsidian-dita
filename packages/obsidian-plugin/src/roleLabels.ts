@@ -33,3 +33,8 @@ export function roleFormatFor(locale: string | undefined): RoleLabelFormatter | 
 export function outlineLabel(locale: string | undefined): string {
   return locale && /^zh/i.test(locale) ? '文档大纲' : 'Document outline';
 }
+
+/** The words a book adds to the topics it merges, for the UI language. */
+export function bookLabels(locale: string | undefined): { missingTopic: string } {
+  return { missingTopic: locale && /^zh/i.test(locale) ? '找不到主题' : 'Missing topic' };
+}

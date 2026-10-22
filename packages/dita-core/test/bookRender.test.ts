@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 import { renderBookXml } from '../src/bookRender';
+import { buildKeyMapForDocument } from '../src/keyMapForDocument';
 
 describe('renderBookXml', () => {
   const dir = mkdtempSync(join(tmpdir(), 'dita-book-'));
@@ -119,5 +120,23 @@ describe('renderBookXml', () => {
 
   it('throws on malformed XML so the host can show the message', () => {
     assert.throws(() => renderBookXml({ xml: '<map><topicref></map>', docDir: dir }));
+  });
+
+  it('keeps key targets working: conkeyref and keyref resolve through the real key space', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dita-book-keys-'));
+    writeFileSync(join(root, 'book.ditamap'), '<map><keydef keys="beta" href="beta.dita"/><topicref href="alpha.dita"/><topicref href="beta.dita"/></map>');
+    writeFileSync(join(root, 'alpha.dita'), '<topic id="alpha"><title>Alpha</title><body><p><ph conkeyref="beta/x"/></p></body></topic>');
+    writeFileSync(join(root, 'beta.dita'), '<topic id="beta"><title>Beta</title><body><p id="x">Reused words</p></body></topic>');
+    const keyMap = buildKeyMapForDocument(join(root, 'book.ditamap'), { root });
+    const r = renderBookXml({ xml: '<map><keydef keys="beta" href="beta.dita"/><topicref href="alpha.dita"/><topicref href="beta.dita"/></map>', docDir: root, keyMap });
+    const alphaSection = r.html.slice(r.html.indexOf('Alpha'), r.html.indexOf('Beta</h1>'));
+    assert.match(alphaSection, /Reused words/);
+  });
+
+  it('names a missing topic in the label the host supplies', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dita-book-missing-'));
+    const xml = '<map><topicref href="gone.dita"/></map>';
+    assert.match(renderBookXml({ xml, docDir: root }).html, /Missing topic: <code>gone\.dita/);
+    assert.match(renderBookXml({ xml, docDir: root, labels: { missingTopic: '找不到主题' } }).html, /找不到主题: <code>gone\.dita/);
   });
 });

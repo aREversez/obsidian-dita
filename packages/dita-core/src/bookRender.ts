@@ -29,8 +29,15 @@ export interface BookXmlRenderInput {
    * relative to it by the time collectMapEntries sees them.
    */
   docDir: string;
-  /** Key name -> text, for keyref in titles and navtitles. */
-  keyMap?: ReadonlyMap<string, string>;
+  /**
+   * Key name -> text, for keyref in titles and navtitles. Pass the Map a
+   * buildKeySpace / buildKeyMapForDocument call returned, not a copy: the
+   * renderer finds each key's file target through that very instance, so a
+   * copy silently turns conkeyref and keyref-with-href into empty output.
+   */
+  keyMap?: Map<string, string>;
+  /** Words the book itself adds, for a host that shows another language. */
+  labels?: { missingTopic?: string };
   /** Formats bookmap division labels ("Chapter 1", "第 1 章", ...). */
   roleFormat?: RoleLabelFormatter;
   /** Fallback language for note labels, as in renderTopicXml. */
@@ -111,7 +118,7 @@ export function renderBookXml(input: BookXmlRenderInput): BookXmlRenderResult {
   };
   expandDitamapRefs(doc.root, input.docDir, read);
 
-  const keyMap = new Map(input.keyMap ?? []);
+  const keyMap = input.keyMap ?? new Map<string, string>();
   const resolveKey = (key: string): string | undefined => keyMap.get(key);
   const entries = collectMapEntries(doc.root, resolveKey, input.roleFormat);
   const title = getMapTitleText(doc.root, resolveKey);
@@ -158,7 +165,7 @@ export function renderBookXml(input: BookXmlRenderInput): BookXmlRenderResult {
       xml = readFile(absPath);
     } catch {
       sections.push(
-        `<p class="dita-book-missing">Missing topic: <code>${escapeHtml(entry.href ?? absPath)}</code></p>`,
+        `<p class="dita-book-missing">${escapeHtml(input.labels?.missingTopic ?? 'Missing topic')}: <code>${escapeHtml(entry.href ?? absPath)}</code></p>`,
       );
       continue;
     }

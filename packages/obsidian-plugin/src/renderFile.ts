@@ -6,7 +6,7 @@
 
 import { dirname, isAbsolute, relative, resolve, sep } from 'path';
 import { buildKeyMapForDocument, decodeHrefPart, renderBookXml, renderMapXml, renderTopicXml } from '@dita-viewer/core';
-import { outlineLabel, roleFormatFor } from './roleLabels';
+import { bookLabels, outlineLabel, roleFormatFor } from './roleLabels';
 
 export interface RenderFileInput {
   /** The topic's source text (read through the vault, so unsaved edits elsewhere are not an issue). */
@@ -115,6 +115,7 @@ export function renderBookFile(input: RenderBookInput): RenderFileResult {
       docDir: dirname(absPath),
       keyMap,
       roleFormat: roleFormatFor(uiLanguage),
+      labels: bookLabels(uiLanguage),
       uiLanguage,
       // The core resolves each image against its own topic's folder; a path
       // that climbs out of the vault cannot be served as a vault resource.

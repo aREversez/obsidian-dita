@@ -5,6 +5,7 @@ import { DEFAULT_SETTINGS, DitaSettings, SettingsProvider, normalizeSettings } f
 import { DitaSettingTab } from './settingsTab';
 import { MODE_LABELS, VIEW_MODES, modesFor } from './viewMode';
 import { DitaFileSwitcher, SnippetPicker } from './pickers';
+import { mapMayAffect } from './mapScope';
 import { STRUCTURES, StructureSpec, WRAPS, WrapSpec } from './snippetsData';
 
 export default class DitaViewerPlugin extends Plugin implements SettingsProvider {
@@ -82,15 +83,19 @@ export default class DitaViewerPlugin extends Plugin implements SettingsProvider
     // Creation and deletion matter too: "File not found" is fixed by creating
     // the missing file, and a new or removed map changes the key space.
     this.registerEvent(this.app.vault.on('modify', (file) => this.onVaultChange(file.path, isMapPath(file.path))));
-    this.registerEvent(this.app.vault.on('create', (file) => this.onVaultChange(file.path, isMapPath(file.path))));
-    this.registerEvent(this.app.vault.on('delete', (file) => this.onVaultChange(file.path, isMapPath(file.path))));
-    this.registerEvent(
-      this.app.vault.on('rename', (file, oldPath) => {
-        const map = isMapPath(file.path) || isMapPath(oldPath);
-        this.onVaultChange(oldPath, map);
-        this.onVaultChange(file.path, map);
-      }),
-    );
+    // While Obsidian indexes the vault it fires `create` for every file it
+    // already has; those are not changes, so the other three wait for the layout.
+    this.app.workspace.onLayoutReady(() => {
+      this.registerEvent(this.app.vault.on('create', (file) => this.onVaultChange(file.path, isMapPath(file.path))));
+      this.registerEvent(this.app.vault.on('delete', (file) => this.onVaultChange(file.path, isMapPath(file.path))));
+      this.registerEvent(
+        this.app.vault.on('rename', (file, oldPath) => {
+          const map = isMapPath(file.path) || isMapPath(oldPath);
+          this.onVaultChange(oldPath, map);
+          this.onVaultChange(file.path, map);
+        }),
+      );
+    });
   }
 
   async saveSettings(): Promise<void> {
@@ -105,16 +110,18 @@ export default class DitaViewerPlugin extends Plugin implements SettingsProvider
 
   /**
    * Re-render and re-check the views that read `path`. A .ditamap passes
-   * `everyView`: a change there can define or undefine keys of every nearby
-   * topic, and a newly created map was not in any view's dependency list.
+   * `isMap`: a change there can define or undefine the keys of every topic in
+   * or below its folder, and a newly created map was not in any view's
+   * dependency list.
    */
-  private onVaultChange(path: string, everyView = false): void {
+  private onVaultChange(path: string, isMap = false): void {
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) return;
     const abs = join(adapter.getBasePath(), path);
     this.eachView((view) => {
       if (view.file?.path === path) return;
-      if (everyView || view.dependsOnAbsolutePath(abs)) void view.refresh();
+      const inScope = isMap && view.file !== null && mapMayAffect(abs, join(adapter.getBasePath(), view.file.path));
+      if (inScope || view.dependsOnAbsolutePath(abs)) void view.refresh();
     });
   }
 }

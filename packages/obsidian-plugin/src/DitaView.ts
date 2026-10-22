@@ -642,7 +642,7 @@ export class DitaView extends TextFileView {
       normalizePath(join(dirname(this.file.path), decodeHrefPart(href.split('#')[0]))),
     );
     if (target instanceof TFile) {
-      void this.app.workspace.getLeaf(false).openFile(target, { eState: { ditaLine: 0, ditaCol: 0 } });
+      this.openSourceBeside(target, 0, 0);
       return;
     }
     new Notice('The topic for this outline entry was not found.');
@@ -653,6 +653,18 @@ export class DitaView extends TextFileView {
    * book, at the line of the element that was right-clicked. Book view has no
    * outline rows, so the clicked section is the target.
    */
+  /** Show a file's source in a new pane beside this one; the outline or book stays put. */
+  private openSourceBeside(file: TFile, line: number, col: number): void {
+    const leaf = this.app.workspace.getLeaf('split', 'vertical');
+    const eState = {
+      ditaLine: Number.isFinite(line) ? line : 0,
+      ditaCol: Number.isFinite(col) ? col : 0,
+    };
+    void leaf.openFile(file, { eState }).then(() => {
+      if (leaf.view instanceof DitaView) leaf.view.setMode('source');
+    });
+  }
+
   private revealBookSection(section: Element, target: Element | null): void {
     const abs = section.getAttribute('data-dita-book-file');
     const vaultRoot = this.vaultRoot();
@@ -671,15 +683,7 @@ export class DitaView extends TextFileView {
     const lineEl = (nearest && section.contains(nearest) ? nearest : section.querySelector('[data-line]')) as Element | null;
     const line = lineEl ? Number(lineEl.getAttribute('data-line')) : 0;
     const col = lineEl ? Number(lineEl.getAttribute('data-start-col') ?? 0) : 0;
-    const leaf = this.app.workspace.getLeaf('split', 'vertical');
-    const eState = {
-      ditaLine: Number.isFinite(line) ? line : 0,
-      ditaCol: Number.isFinite(col) ? col : 0,
-    };
-    void leaf.openFile(file, { eState }).then(() => {
-      // The book stays on the other side; show only the topic source here.
-      if (leaf.view instanceof DitaView) leaf.view.setMode('source');
-    });
+    this.openSourceBeside(file, line, col);
   }
 
   private onClick(evt: MouseEvent): void {
