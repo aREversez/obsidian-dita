@@ -6,7 +6,7 @@
 
 import { dirname, isAbsolute, relative, resolve, sep } from 'path';
 import { buildKeyMapForDocument, decodeHrefPart, renderBookXml, renderMapXml, renderSiteXml, renderTopicXml } from '@dita-viewer/core';
-import type { SiteNavEntry } from '@dita-viewer/core';
+import type { ProfileFilter, SiteNavEntry } from '@dita-viewer/core';
 import { bookLabels, outlineLabel, roleFormatFor, siteLabels } from './roleLabels';
 
 export interface RenderFileInput {
@@ -100,11 +100,13 @@ export function renderDitamapFile(input: RenderMapInput): RenderFileResult {
 export interface RenderBookInput extends RenderMapInput {
   /** Maps a vault-relative path ("img/a.png") to a URL the preview can load. */
   toResourceUrl: (vaultRelativePath: string) => string;
+  /** Conditional processing: map entries the filter leaves out do not appear. */
+  filter?: ProfileFilter;
 }
 
 /** Render a .ditamap as a book: every referenced topic on one page. */
 export function renderBookFile(input: RenderBookInput): RenderFileResult {
-  const { xml, absPath, vaultRoot, toResourceUrl, uiLanguage } = input;
+  const { xml, absPath, vaultRoot, toResourceUrl, uiLanguage, filter } = input;
   const dependencies = new Set<string>([absPath]);
   try {
     const keyMap = buildKeyMapForDocument(absPath, {
@@ -118,6 +120,7 @@ export function renderBookFile(input: RenderBookInput): RenderFileResult {
       roleFormat: roleFormatFor(uiLanguage),
       labels: bookLabels(uiLanguage),
       uiLanguage,
+      filter,
       // The core resolves each image against its own topic's folder; a path
       // that climbs out of the vault cannot be served as a vault resource.
       toResourceUrl: (targetAbsPath) => {
@@ -151,7 +154,7 @@ export interface RenderSiteResult extends RenderFileResult {
 
 /** Render one page of a .ditamap as a site, plus the sidebar manifest. */
 export function renderSiteFile(input: RenderSiteInput): RenderSiteResult {
-  const { xml, absPath, vaultRoot, toResourceUrl, uiLanguage, current, titleCache } = input;
+  const { xml, absPath, vaultRoot, toResourceUrl, uiLanguage, current, titleCache, filter } = input;
   const dependencies = new Set<string>([absPath]);
   try {
     const keyMap = buildKeyMapForDocument(absPath, {
@@ -165,6 +168,7 @@ export function renderSiteFile(input: RenderSiteInput): RenderSiteResult {
       roleFormat: roleFormatFor(uiLanguage),
       labels: siteLabels(uiLanguage),
       uiLanguage,
+      filter,
       current,
       titleCache,
       // The core resolves each image against the current topic's folder; a

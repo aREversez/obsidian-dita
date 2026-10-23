@@ -68,6 +68,36 @@ export default class DitaViewerPlugin extends Plugin implements SettingsProvider
       },
     });
     this.addCommand({
+      id: 'profiling-panel',
+      name: 'Show or hide the conditional processing panel',
+      checkCallback: (checking) => {
+        const view = this.app.workspace.getActiveViewOfType(DitaView);
+        if (!view?.hasPreview()) return false;
+        if (!checking) view.toggleProfilePanel();
+        return true;
+      },
+    });
+    this.addCommand({
+      id: 'apply-ditaval',
+      name: 'Apply a DITAVAL file',
+      checkCallback: (checking) => {
+        const view = this.app.workspace.getActiveViewOfType(DitaView);
+        if (!view) return false;
+        if (!checking) view.chooseDitaval();
+        return true;
+      },
+    });
+    this.addCommand({
+      id: 'clear-ditaval',
+      name: 'Clear the DITAVAL file',
+      checkCallback: (checking) => {
+        const view = this.app.workspace.getActiveViewOfType(DitaView);
+        if (!view?.hasDitaval()) return false;
+        if (!checking) view.clearDitaval();
+        return true;
+      },
+    });
+    this.addCommand({
       id: 'quick-switch',
       name: 'Quick switch to a DITA file',
       callback: () => new DitaFileSwitcher(this.app).open(),

@@ -32,6 +32,8 @@
     "src/snippets.ts",
     "src/snippetsData.ts",
     "src/conrefJump.ts",
-    "src/fileIds.ts"
+    "src/fileIds.ts",
+    "src/profileState.ts",
+    "src/profileLabels.ts"
   ]
 }

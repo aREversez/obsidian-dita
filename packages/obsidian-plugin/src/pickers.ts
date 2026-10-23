@@ -82,3 +82,26 @@ export class DitaFileSwitcher extends SuggestModal<TFile> {
     void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
   }
 }
+
+/** Lists the .ditaval files found in the vault folder, by vault path. */
+export class DitavalPicker extends SuggestModal<string> {
+  constructor(app: App, private readonly files: readonly string[], private readonly onPick: (path: string) => void) {
+    super(app);
+    this.setPlaceholder('Choose a DITAVAL file…');
+  }
+
+  getSuggestions(query: string): string[] {
+    const needle = query.trim().toLowerCase();
+    const matches = needle ? this.files.filter((path) => path.toLowerCase().includes(needle)) : [...this.files];
+    return matches.slice(0, MAX_SUGGESTIONS);
+  }
+
+  renderSuggestion(path: string, el: HTMLElement): void {
+    el.createDiv({ text: path.split('/').pop() ?? path });
+    el.createDiv({ cls: 'dita-suggest-path', text: path });
+  }
+
+  onChooseSuggestion(path: string): void {
+    this.onPick(path);
+  }
+}
