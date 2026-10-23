@@ -87,8 +87,14 @@ values is unticked; this one follows DITA-OT (every value of one attribute).
 
 - [ ] Make the VS Code DITA Viewer depend on `@dita-viewer/core` instead of its
       own copies (two small upstream changes, listed in
-      `packages/dita-core/README.md`). Start after Phase 1 so two repositories
-      are not changing at once.
+      `packages/dita-core/README.md`). Decided: publish the core to npm and
+      depend on it by version.
+  - [x] Move `openHrefTarget` out of `topicRender.ts` (upstream, then re-copied
+        here; `vscode-stub.d.ts` removed).
+  - [ ] Re-point `media/styles.css` at the `--dita-*` host tokens with a VS Code
+        adapter sheet. Needs a look in VS Code itself.
+  - [ ] Publish `@dita-viewer/core` to npm, then replace the extension's 118
+        imports of the copied modules and delete its copies.
 
 ## Out of scope for now
 
