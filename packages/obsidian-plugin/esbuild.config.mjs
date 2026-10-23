@@ -11,8 +11,11 @@ const out = resolve(here, 'dist');
 mkdirSync(out, { recursive: true });
 
 // Obsidian loads main.js, manifest.json and styles.css from the plugin folder.
+// manifest.json lives at the repository root, where the community plugin
+// directory reads it.
 const copyStatic = () => {
-  for (const f of ['manifest.json', 'styles.css']) copyFileSync(resolve(here, f), resolve(out, f));
+  copyFileSync(resolve(here, '../../manifest.json'), resolve(out, 'manifest.json'));
+  copyFileSync(resolve(here, 'styles.css'), resolve(out, 'styles.css'));
 };
 
 // After every successful bundle, mirror dist into the local test vault when it
