@@ -1,0 +1,48 @@
+# Publish a release when a version tag is pushed.
+#
+#   npm version 0.2.0 -w obsidian-dita --no-git-tag-version
+#   git commit -am "chore: release 0.2.0" && git tag 0.2.0 && git push --follow-tags
+#
+# The tag is the bare version, with no leading "v": Obsidian and BRAT install
+# the release whose tag equals manifest.json's version.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Typecheck, all tests, the bundle, and the manifest checks.
+      - run: npm run verify
+
+      # verify cannot know the tag; this is what stops "0.2.1" shipping a 0.2.0 manifest.
+      - name: Check the tag matches manifest.json
+        run: node scripts/check-release.mjs "$GITHUB_REF_NAME"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            packages/obsidian-plugin/dist/main.js \
+            packages/obsidian-plugin/dist/manifest.json \
+            packages/obsidian-plugin/dist/styles.css

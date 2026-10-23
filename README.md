@@ -131,16 +131,32 @@ the sidebar, along with hidden content inside the topics. The filter belongs
 to the pane and is saved with the workspace layout. It does not change the
 files, and does not touch the source editor.
 
-## Install (manual)
+## Install
+
+**Desktop only.** The plugin reads files through Node (`fs`), so it does not
+run on Obsidian mobile, and it needs a vault stored on the local file system.
+
+### With BRAT (before the plugin is in the community directory)
+
+1. Install **Obsidian42 - BRAT** from Community plugins.
+2. BRAT → *Add beta plugin*, enter `aREversez/obsidian-dita`.
+3. Enable **DITA Viewer** under Settings → Community plugins.
+
+BRAT installs the latest GitHub release and offers updates as new ones appear.
+
+### By hand
+
+Download `main.js`, `manifest.json` and `styles.css` from the latest
+[release](https://github.com/aREversez/obsidian-dita/releases) into
+`<vault>/.obsidian/plugins/dita-viewer/`, then enable **DITA Viewer**. To build
+them yourself:
 
 ```
 npm install
 npm run build
 ```
 
-Copy `packages/obsidian-plugin/dist/{main.js,manifest.json,styles.css}` into
-`<vault>/.obsidian/plugins/dita-viewer/`, then enable **DITA Viewer** under
-Settings → Community plugins.
+and copy `packages/obsidian-plugin/dist/{main.js,manifest.json,styles.css}`.
 
 ## How it follows your theme
 
@@ -211,6 +227,24 @@ npm run watch -w obsidian-dita
 watch command does the same after each successful rebuild. Use `npm run
 sync:test` to copy the current bundle without rebuilding, or set
 `DITA_TEST_VAULT_PLUGIN` to a different plugin folder.
+
+## Releasing
+
+The version lives in `manifest.json` (repository root), `versions.json` and
+the plugin's `package.json`; `npm run release:check` (part of `verify`) fails
+when they disagree.
+
+```
+npm version 0.2.0 -w obsidian-dita --no-git-tag-version   # also updates manifest.json and versions.json
+git commit -am "chore: release 0.2.0"
+git tag 0.2.0 && git push --follow-tags
+```
+
+Pushing the tag runs `.github/workflows/release.yml`: it runs `npm run verify`,
+checks that the tag equals the manifest version (bare `0.2.0`, no `v`), and
+publishes a GitHub release with `main.js`, `manifest.json` and `styles.css`
+attached. Raise `minAppVersion` in `manifest.json` before the bump if a release
+starts to need a newer Obsidian; `versions.json` records it per version.
 
 ## Sample document
 

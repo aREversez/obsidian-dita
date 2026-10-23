@@ -75,10 +75,13 @@ values is unticked; this one follows DITA-OT (every value of one attribute).
 
 ### Phase 4 — release
 
-- [ ] Version and `manifest.json` hygiene, release workflow that attaches
-      `main.js`, `manifest.json`, `styles.css`.
-- [ ] Trial through BRAT, then consider the community plugin directory
-      (screenshots, desktop-only note in the README).
+- [x] Version and `manifest.json` hygiene (one manifest at the repo root,
+      `versions.json`, `npm run release:check`), release workflow that attaches
+      `main.js`, `manifest.json`, `styles.css` (`.github/workflows/release.yml`).
+      The workflow has not run yet: it needs a first tag pushed to GitHub.
+- [x] BRAT install and the desktop-only note are in the README.
+- [ ] Trial through BRAT with a first tag (`0.1.0`), then consider the community
+      plugin directory (needs screenshots; its review also reads the README).
 
 ### In parallel, later
 
