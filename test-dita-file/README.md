@@ -52,7 +52,7 @@ test-dita-file/
 
 ## 条件处理
 
-`common/strict.ditaval` 定义了 `audience`、`platform`、`product`、`otherprops` 和 `props` 的排除/保留规则。当前 Obsidian 预览**只高亮**条件属性，不执行过滤；过滤发生在发布器一侧。
+`common/strict.ditaval` 定义了 `audience`、`platform`、`product`、`otherprops` 和 `props` 的排除/保留规则。Obsidian 预览默认只高亮条件属性；在窗格标题栏的过滤按钮（或命令“Apply a DITAVAL file”）中选择这个文件后，预览会按它隐藏被排除的内容，在站点视图和书籍视图中也会去掉被排除的 `topicref`。
 
 ## 图片
 

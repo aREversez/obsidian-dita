@@ -14,6 +14,8 @@ starting work; update the checkboxes in the same change that finishes an item.
 - [x] Selectable, copyable preview (Ctrl/Cmd+A, context menu).
 - [x] Tag, attribute and value completion (keys, files, images, ids).
 - [x] `.ditamap` outline view in the same three modes; click to open a topic.
+- [x] Conditional processing: `.ditaval` and hand-picked profiling values in the
+      preview, outline, site and book views (Phase 3 below).
 
 ## Next
 
@@ -55,8 +57,21 @@ the quick switcher.
 
 ### Phase 3 — conditional processing
 
-- [ ] `.ditaval` and profiling filters in the preview. First check which parts
-      of the VS Code implementation can move into core unchanged.
+Reuse check against the VS Code viewer (`dev`, `3b5e31a`): the renderer
+already stamps `data-profile-keys` and the stylesheet already has
+`.profile-filtered-out`, so both came for free. `src/editor/ditaval.ts` is the
+closest piece but only answers "is this excluded" for its completeness check,
+and the filter panel is an inline webview script built on `--vscode-*` and the
+extension's toolbar, so neither moves into core unchanged. The engine here is
+new (`packages/dita-core/src/profiling.ts`), informed by `ditaval.ts`. One
+difference to know about: the VS Code panel hides an element when *any* of its
+values is unticked; this one follows DITA-OT (every value of one attribute).
+
+- [x] `.ditaval` and profiling filters in the preview: filter panel, `.ditaval`
+      picker, per-pane state, topicref-level filtering in site and book view.
+- [ ] Check in Obsidian itself (not done yet, see the patch notes): the header
+      button and panel, the picker finding a `.ditaval` the vault index may not
+      list, and that editing the `.ditaval` refreshes the preview.
 
 ### Phase 4 — release
 

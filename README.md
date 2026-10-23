@@ -20,11 +20,12 @@ editing the XML source with view modes (below), tag / attribute / value
 completion in the editor, source diagnostics (well-formedness, references to
 nothing, duplicate ids), Ctrl/Cmd+click on a reference to open its target,
 conref "jump to source" in the preview, wrap and insert commands, the
-`.ditamap` outline, site and book views (below), and a quick switcher for
-`.dita` / `.ditamap` files.
+`.ditamap` outline, site and book views (below), conditional processing with
+a `.ditaval` or hand-picked values (below), and a quick switcher for `.dita` /
+`.ditamap` files.
 
-Not yet: profiling filters, Git compare, DITA-OT. Mobile is not supported
-because the core reads files through Node.
+Not yet: Git compare, DITA-OT. Mobile is not supported because the core reads
+files through Node.
 
 ## View modes
 
@@ -93,6 +94,42 @@ menu offers *Back to Reading view*, *Back to Site view* or *Back to Book view*
 to return where you were. The outline re-renders when a referenced submap
 changes. Side by side, the outline follows your typing; clicking in it does not
 move the source caret.
+
+## Conditional processing
+
+Content marked with `audience`, `platform`, `product`, `otherprops`, `props`
+(including `props="audience(admin)"` groups) and the other profiling attributes
+is tinted and labelled in the preview. The **filter** button in the pane header
+(or the command *Show or hide the conditional processing panel*) opens a panel
+to leave content out of the preview:
+
+- **DITAVAL**: choose a `.ditaval` from the vault (command *Apply a DITAVAL
+  file*; *Clear the DITAVAL file* removes it). Its `exclude` rules hide content
+  the way DITA-OT would leave it out of a build. The file is found by walking
+  the vault folder, so it need not be a file type Obsidian lists. Editing it
+  updates the preview if Obsidian reports the change; otherwise the next
+  re-render picks it up. A file that is not well-formed XML is reported and
+  not applied.
+- **Values**: every attribute value on the page, ticked while it stays. Untick
+  one to hide it. Values the `.ditaval` excludes show as unticked and cannot
+  be ticked here; the file decides.
+- **Highlight profiled content** switches the tint and label off, for a clean
+  read without hiding anything.
+
+The rules are DITA-OT's: an element is left out when *every* value of one
+attribute is excluded (`audience="internal admin"` stays if `admin` is not
+excluded); a `<prop att="x" action="exclude"/>` without a `val` is the default
+for the values of `x` that have no rule of their own; `flag`, `passthrough` and
+`<revprop>` never remove content. A `.ditaval` acts on `audience`, `platform`,
+`product`, `otherprops`, `props` and attributes named in `props` groups, as
+DITA-OT does; `base`, `importance`, `rev` and `status` can only be hidden by
+hand.
+
+In the outline, rows are hidden in place. In Site and Book view, a `topicref`
+the filter leaves out is dropped with its sub-topics, from the page and from
+the sidebar, along with hidden content inside the topics. The filter belongs
+to the pane and is saved with the workspace layout. It does not change the
+files, and does not touch the source editor.
 
 ## Install (manual)
 
