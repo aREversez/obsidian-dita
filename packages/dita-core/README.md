@@ -27,5 +27,9 @@ The intended end state is that the VS Code extension depends on this package
 instead of holding its own copies. Two small upstream changes make that
 possible. The first is done: `openHrefTarget` now lives in the extension's own
 `editor/openHrefTarget.ts`, so `topicRender.ts` mentions no host and the
-`vscode` type stand-in is gone. The second is open: re-point `media/styles.css`
-at the host tokens with a small VS Code adapter sheet.
+`vscode` type stand-in is gone. The second is done in part: the extension's
+`media/styles.css` reads these `--dita-*` tokens in its content and outline
+rules, answered from VS Code's theme in one `:root` block, with rendering
+unchanged. It is not yet interchangeable with `styles/dita-content.css`; the
+open differences (selectors, three colour families this package folds into one
+token, two tokens nothing upstream reads yet) are listed in `ROADMAP.md`.

@@ -91,8 +91,20 @@ values is unticked; this one follows DITA-OT (every value of one attribute).
       depend on it by version.
   - [x] Move `openHrefTarget` out of `topicRender.ts` (upstream, then re-copied
         here; `vscode-stub.d.ts` removed).
-  - [ ] Re-point `media/styles.css` at the `--dita-*` host tokens with a VS Code
-        adapter sheet. Needs a look in VS Code itself.
+  - [x] Re-point `media/styles.css` at the `--dita-*` host tokens, with the
+        VS Code answers in one `:root` block at the top of that file (upstream;
+        28 declarations, rendering unchanged). Not yet equal to
+        `dita-content.css`, see the gaps below.
+  - [ ] Close the style gaps before the extension takes its content rules from
+        this package: (1) selectors: upstream styles `body`, `:root`, `html.dv-*`,
+        this package `.dita-body` and `:host`, so VS Code needs the `dita-body`
+        class on its body (or the core rules need an alias for both); (2) the 11
+        declarations behind the image button, context menu and toast
+        (`dropdown-*`, `menu-*`, `notifications-*`) are still `--vscode-*`
+        upstream because this package folds them into `--dita-bg-elevated` and
+        friends; decide whether VS Code accepts the merged colours or the core
+        gets finer tokens; (3) `--dita-border` and `--dita-selected-fg` are
+        defined upstream but no shared rule there reads them yet.
   - [ ] Publish `@dita-viewer/core` to npm, then replace the extension's 118
         imports of the copied modules and delete its copies.
 
