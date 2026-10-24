@@ -69,9 +69,10 @@ values is unticked; this one follows DITA-OT (every value of one attribute).
 
 - [x] `.ditaval` and profiling filters in the preview: filter panel, `.ditaval`
       picker, per-pane state, topicref-level filtering in site and book view.
-- [ ] Check in Obsidian itself (not done yet, see the patch notes): the header
-      button and panel, the picker finding a `.ditaval` the vault index may not
-      list, and that editing the `.ditaval` refreshes the preview.
+- [x] Checked in Obsidian itself: the header button opens the panel with the
+      right values, the picker finds a `.ditaval` the vault index does not list
+      (`common/strict.ditaval` never appears in the file tree), and editing that
+      file refreshes the preview on its own within a few seconds.
 
 ### Phase 4 — release
 
