@@ -5,6 +5,10 @@
 #
 # The tag is the bare version, with no leading "v": Obsidian and BRAT install
 # the release whose tag equals manifest.json's version.
+#
+# The job also publishes packages/dita-core to npm, via OIDC trusted publishing:
+# no NODE_AUTH_TOKEN lives anywhere. The package must already exist on npm and
+# carry a trusted publisher for aREversez/obsidian-dita + release.yml.
 
 name: Release
 
@@ -15,6 +19,9 @@ on:
 
 permissions:
   contents: write
+  # Lets npm exchange a short-lived GitHub OIDC token for publish rights; this
+  # replaces a long-lived npm token and is what `--provenance` signs with.
+  id-token: write
 
 jobs:
   release:
@@ -24,7 +31,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          registry-url: https://registry.npmjs.org
           cache: npm
 
       - run: npm ci
@@ -46,3 +54,21 @@ jobs:
             packages/obsidian-plugin/dist/main.js \
             packages/obsidian-plugin/dist/manifest.json \
             packages/obsidian-plugin/dist/styles.css
+
+      # Trusted publishing needs npm 11.5.1+; the npm bundled with Node 22 is
+      # still 10.x, so upgrade before publishing rather than pinning the version
+      # through a token.
+      - name: Upgrade npm for OIDC publishing
+        run: npm install --global npm@^11.15.0
+
+      # npm refuses to overwrite a version, and the core has its own version
+      # number, so a plugin-only release must not turn this job red.
+      - name: Publish @dita-viewer/core to npm
+        working-directory: packages/dita-core
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if npm view "@dita-viewer/core@$version" version > /dev/null 2>&1; then
+            echo "@dita-viewer/core@$version is already on the registry; skipping."
+            exit 0
+          fi
+          npm publish --provenance --access public
