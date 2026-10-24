@@ -113,12 +113,11 @@ values is unticked; this one follows DITA-OT (every value of one attribute).
         export too little; the extension now imports 107 distinct symbols from
         the copied modules (99 in `src`, 8 more only in tests) and 0.1.0 had 46
         of them.
-  - [ ] Publish 0.2.0, which exports the remaining 61 (`src/index.ts`, pinned
-        by `test/publicApi.test.ts`). The release workflow publishes it when
-        the next plugin tag is pushed, or run the steps in
-        `packages/dita-core/README.md`.
-  - [ ] In the extension: depend on the package, replace its imports of the
-        copied modules, delete the copies, and adjust its build and tests.
+  - [x] Publish 0.2.0, which exports the remaining 61 (`src/index.ts`, pinned
+        by `test/publicApi.test.ts`).
+  - [x] In the extension: depend on the package (pinned to 0.2.0), replace its
+        imports of the copied modules, delete the copies, and adjust its
+        build and tests.
 
 
 ## Out of scope for now
@@ -134,9 +133,11 @@ values is unticked; this one follows DITA-OT (every value of one attribute).
 - Commit messages carry no co-author, session or tool trailers, and no mention
   of the tool that wrote the change.
 - Prefer small, surgical edits that keep existing wording and structure.
-- The verbatim files in `packages/dita-core` (`src/parser/`, `src/render/`,
-  `src/editor/*.ts`, `src/language/*.ts`) are copies of the VS Code DITA Viewer
-  at `596202d`. Do not edit them here: change upstream, re-copy, run the tests.
+- The files in `packages/dita-core` that began as copies of the VS Code DITA
+  Viewer (`src/parser/`, `src/render/`, `src/editor/*.ts`,
+  `src/language/*.ts`) are edited here: the viewer depends on this package since
+  0.2.0 and holds no copies. A change to them needs a new core version, and the
+  viewer has to raise its pinned dependency to get it.
 - Colours come from Obsidian variables through `obsidian-adapter.css` only; no
   hard-coded colours, no `--vscode-*`.
 - Before delivering: `npm run verify` (typecheck, all tests, bundle) must pass,

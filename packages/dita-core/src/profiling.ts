@@ -1,7 +1,7 @@
 // Conditional processing: which profiled content a .ditaval file, or a hand
 // picked set of values, leaves out of a preview.
 //
-// Host-neutral and DOM-free. The renderer (a verbatim copy, see README)
+// Host-neutral and DOM-free. The renderer
 // already stamps every profiled element with `data-profile-keys`, a list of
 // `attribute:value` pairs, and the stylesheet already hides anything carrying
 // `.profile-filtered-out`. What was missing is the decision: does this
@@ -50,8 +50,8 @@ export interface ProfileFilter {
 
 /**
  * The attributes the renderer records in data-profile-keys, in its order.
- * Kept in step with PROFILING_ATTRS in render/renderer.ts (a verbatim file we
- * cannot export from); a test renders each one to catch drift.
+ * Kept in step with PROFILING_ATTRS in render/renderer.ts (not exported from
+ * there); a test renders each one to catch drift.
  */
 export const PROFILE_ATTRS = ['props', 'platform', 'product', 'audience', 'otherprops', 'base', 'importance', 'rev', 'status'] as const;
 

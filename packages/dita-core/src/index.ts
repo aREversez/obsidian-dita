@@ -1,9 +1,9 @@
 // Public surface of @dita-viewer/core.
 //
 // Hosts (the Obsidian plugin, and in time the VS Code extension) render DITA
-// through these exports only. Everything under ./parser, ./render and ./editor
-// is a verbatim copy of the VS Code DITA Viewer sources (see README), so a
-// change there should be made upstream and re-synced, not edited here.
+// through these exports only. The VS Code DITA Viewer depends on this package
+// and holds no copies of ./parser, ./render and ./editor (see README), so they
+// are edited here and released as a new version.
 
 export { renderTopicXml, buildTitleMap, collectDitamapFilesUpward } from './editor/topicRender';
 export type { TopicXmlRenderInput, TopicRenderInput, TopicRenderResult, ParsedTopicResult } from './editor/topicRender';
