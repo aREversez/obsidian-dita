@@ -6,7 +6,9 @@ starting work; update the checkboxes in the same change that finishes an item.
 ## Done
 
 - [x] Monorepo: `packages/dita-core` (host-neutral parser, renderer, stylesheet,
-      completion engine) and `packages/obsidian-plugin`.
+      completion engine) and `packages/obsidian-plugin`. The core has since
+      moved to the VS Code DITA Viewer repository (`packages/core`); this
+      repository installs it from npm.
 - [x] Theme-following preview (Shadow DOM + `obsidian-adapter.css`, contrast
       tested across theme archetypes).
 - [x] Reading view / Source mode / side-by-side live preview, CodeMirror 6 XML
@@ -63,7 +65,7 @@ already stamps `data-profile-keys` and the stylesheet already has
 closest piece but only answers "is this excluded" for its completeness check,
 and the filter panel is an inline webview script built on `--vscode-*` and the
 extension's toolbar, so neither moves into core unchanged. The engine here is
-new (`packages/dita-core/src/profiling.ts`), informed by `ditaval.ts`. One
+new (`src/profiling.ts` in the core), informed by `ditaval.ts`. One
 difference to know about: the VS Code panel hides an element when *any* of its
 values is unticked; this one follows DITA-OT (every value of one attribute).
 
@@ -87,9 +89,9 @@ values is unticked; this one follows DITA-OT (every value of one attribute).
 ### In parallel, later
 
 - [ ] Make the VS Code DITA Viewer depend on `@dita-viewer/core` instead of its
-      own copies (two small upstream changes, listed in
-      `packages/dita-core/README.md`). Decided: publish the core to npm and
-      depend on it by version.
+      own copies. Decided: publish the core to npm and depend on it by version.
+      The core's source moved into the viewer's repository (`packages/core`,
+      with its own README), so it is edited and released there.
   - [x] Move `openHrefTarget` out of `topicRender.ts` (upstream, then re-copied
         here; `vscode-stub.d.ts` removed).
   - [x] Re-point `media/styles.css` at the `--dita-*` host tokens, with the
@@ -133,11 +135,11 @@ values is unticked; this one follows DITA-OT (every value of one attribute).
 - Commit messages carry no co-author, session or tool trailers, and no mention
   of the tool that wrote the change.
 - Prefer small, surgical edits that keep existing wording and structure.
-- The files in `packages/dita-core` that began as copies of the VS Code DITA
-  Viewer (`src/parser/`, `src/render/`, `src/editor/*.ts`,
-  `src/language/*.ts`) are edited here: the viewer depends on this package since
-  0.2.0 and holds no copies. A change to them needs a new core version, and the
-  viewer has to raise its pinned dependency to get it.
+- The core (`@dita-viewer/core`) is not in this repository. It is edited in the
+  VS Code DITA Viewer repository (`packages/core`) and released there with a
+  `core-<version>` tag. This repository pins a published version in
+  `packages/obsidian-plugin/package.json`; to take a change, raise it, then run
+  `npm install` and `npm run verify`.
 - Colours come from Obsidian variables through `obsidian-adapter.css` only; no
   hard-coded colours, no `--vscode-*`.
 - Before delivering: `npm run verify` (typecheck, all tests, bundle) must pass,

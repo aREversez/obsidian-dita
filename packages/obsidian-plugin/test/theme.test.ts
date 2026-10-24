@@ -6,7 +6,7 @@ import { contrast, declarationsOf, evalColor, RGB } from '../src/theme/colorMath
 
 // mocha runs from the package directory (npm workspace script).
 const adapterCss = readFileSync(resolve(process.cwd(), 'src/theme/obsidian-adapter.css'), 'utf-8');
-const coreCss = readFileSync(resolve(process.cwd(), '../dita-core/styles/dita-content.css'), 'utf-8');
+const coreCss = readFileSync(require.resolve('@dita-viewer/core/styles/dita-content.css'), 'utf-8');
 const hostDecls = declarationsOf(adapterCss, ':host');
 
 const stripComments = (s: string): string => s.replace(/\/\*[\s\S]*?\*\//g, '');

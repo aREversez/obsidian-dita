@@ -1,6 +1,6 @@
 import { FileSystemAdapter, Keymap, Menu, Notice, TFile, TextFileView, ViewStateResult, WorkspaceLeaf, moment, normalizePath, setIcon } from 'obsidian';
 import { dirname, isAbsolute, join, relative, resolve } from 'path';
-import coreCss from '../../dita-core/styles/dita-content.css';
+import coreCss from '@dita-viewer/core/styles/dita-content.css';
 import adapterCss from './theme/obsidian-adapter.css';
 import { collectDiagnostics, decodeHrefPart, getKeyDefs, isExcluded, profileGroups, profileValuesOfKeys, splitRefFragment } from '@dita-viewer/core';
 import type { Ditaval, ProfileFilter, ProfileGroup, SiteNavEntry } from '@dita-viewer/core';

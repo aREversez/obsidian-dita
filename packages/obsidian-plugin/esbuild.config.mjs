@@ -62,8 +62,6 @@ const options = {
     ...builtinModules,
     ...builtinModules.map((m) => `node:${m}`),
   ],
-  // The workspace package is bundled from source, so no separate build step.
-  alias: { '@dita-viewer/core': resolve(here, '../dita-core/src/index.ts') },
   loader: { '.css': 'text' },
   sourcemap: watch ? 'inline' : false,
   minify: !watch,

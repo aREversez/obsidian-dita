@@ -5,8 +5,10 @@ formatted reading view and `.ditamap` files in an outline tree, as a small
 site with one topic per page, or as a whole book; all take their colours, fonts
 and heading style from whichever theme you use.
 
-Built on [`@dita-viewer/core`](packages/dita-core), the same rendering engine as
-the [VS Code DITA Viewer](https://github.com/aREversez/VS-Code-DITA-Viewer).
+Built on [`@dita-viewer/core`](https://www.npmjs.com/package/@dita-viewer/core), the
+same rendering engine as the
+[VS Code DITA Viewer](https://github.com/aREversez/VS-Code-DITA-Viewer), whose
+repository holds its source (`packages/core`).
 
 ## Status
 
@@ -171,7 +173,7 @@ theme can influence it only in ways it is meant to.
    `<body>`; custom properties inherit across the shadow boundary. The adapter
    ([`obsidian-adapter.css`](packages/obsidian-plugin/src/theme/obsidian-adapter.css))
    is the only file that knows Obsidian's variable names. It maps them to the
-   core's 12 host tokens ([`TOKENS.md`](packages/dita-core/styles/TOKENS.md)):
+   core's 12 host tokens ([`TOKENS.md`](https://github.com/aREversez/VS-Code-DITA-Viewer/blob/dev/packages/core/styles/TOKENS.md)):
    text, background, border, link and code colours, body font, font size,
    line height, readable line width, and the theme's heading sizes, weights,
    fonts and colours.
@@ -211,9 +213,14 @@ See [ROADMAP.md](ROADMAP.md) for what is planned next and the working rules.
 ## Layout
 
 ```
-packages/dita-core        host-neutral parser + renderer + stylesheet (shared)
 packages/obsidian-plugin  the Obsidian plugin: view, theme adapter, build
 ```
+
+The rendering core, `@dita-viewer/core`, is installed from npm and pinned in
+`packages/obsidian-plugin/package.json`. Its source is in the VS Code DITA
+Viewer repository (`packages/core`), where it is edited and released with a
+`core-<version>` tag. To take a change, raise the pinned version and run
+`npm install` and `npm run verify`.
 
 ## Development
 

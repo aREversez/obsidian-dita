@@ -101,7 +101,7 @@ describe('strict.ditaval on the fixture topics', () => {
   });
 
   it('the stylesheet hides what the view marks as filtered out', () => {
-    const css = readFileSync(join(ROOT, 'packages', 'dita-core', 'styles', 'dita-content.css'), 'utf-8');
+    const css = readFileSync(require.resolve('@dita-viewer/core/styles/dita-content.css'), 'utf-8');
     assert.match(css, /\.profile-filtered-out\s*\{\s*display:\s*none\s*!important/);
   });
 });
