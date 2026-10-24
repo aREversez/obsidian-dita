@@ -1,7 +1,7 @@
 import { strict as assert } from 'assert';
 import * as core from '../src/index';
 // Type-only: fails the build, not just the run, if a type the extension needs stops being exported.
-import type { DitaDocument, DitaNode, RenderContext, SourceRange } from '../src/index';
+import type { DitaDocument, DitaNode, DocSymbolSpec, FileReader, RenderContext, SourceRange } from '../src/index';
 
 describe('public API', () => {
   // What the VS Code viewer imports from the modules it copied. If one of these
@@ -22,6 +22,65 @@ describe('public API', () => {
     'isDitamapRef',
     'renderMapDocument',
     'isExternalRef',
+    'BASE_TYPE_RENDERERS',
+    'DEFAULT_NOTE_LABELS',
+    'IMAGE_DIMENSIONS_CACHE_MAX',
+    'TOPIC_RENDER_CACHE_MAX_BYTES',
+    'URL_SCHEME_RE',
+    'ZH_NOTE_LABELS',
+    'buildRenderContext',
+    'clearAllSourceOverlays',
+    'clearImageDimensionsCache',
+    'clearTopicRenderCache',
+    'collectMapKeys',
+    'collectMapSymbols',
+    'collectText',
+    'collectTopicSymbols',
+    'collectUnknownElements',
+    'computeKeyrefSpacing',
+    'dependsOn',
+    'detectIndexLabel',
+    'detectNoteLabels',
+    'expandDitamapRefs',
+    'findConrefTargetOffset',
+    'findEnclosingKeydefKeys',
+    'findIdAttrAt',
+    'findKeyDefinitionOffset',
+    'findKeysAttrAt',
+    'findRefAttrAt',
+    'findUnclosedTag',
+    'getAttributesForTag',
+    'getAutoCloseTag',
+    'getCloseTagCompletion',
+    'getCompletionContext',
+    'getMapRefName',
+    'isKeyContextAvailable',
+    'keySourceMaps',
+    'lookupNamedEntity',
+    'makeConrefRangeResolver',
+    'makeConrefResolver',
+    'makeFileCache',
+    'makeFileTitleResolver',
+    'makeIsInCurrentBook',
+    'mergeProfilingAttrs',
+    'needsSpace',
+    'noteSourceDependencies',
+    'profilingChipsHtml',
+    'profilingKeysAttr',
+    'qualifiedNames',
+    'qualifiedNamesMulti',
+    'readImageDimensions',
+    'renderTopicCached',
+    'renderTopicToHtml',
+    'resolveConkeyref',
+    'setTopicRenderCacheBudgetForTesting',
+    'sourceOverlaySize',
+    'sourceStamp',
+    'stampFiles',
+    'stripSameDocumentFragmentPrefix',
+    'topicRenderCacheBytesHeld',
+    'topicRenderCacheSize',
+    'trackSourceReads',
   ] as const;
 
   it('exports every parser and renderer entry point the VS Code viewer uses', () => {
@@ -41,7 +100,7 @@ describe('public API', () => {
     assert.equal(core.STANDARD_TAG_TO_BASETYPE.p, 'topic/p');
     assert.equal(core.MAP_STANDARD_TAG_TO_BASETYPE.topicref, 'map/topicref');
     // RenderContext is only named here, so a rename or removal is a compile error.
-    const unused: RenderContext | undefined = undefined;
+    const unused: RenderContext | DocSymbolSpec | FileReader | undefined = undefined;
     assert.equal(unused, undefined);
   });
 });

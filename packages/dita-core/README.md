@@ -50,6 +50,9 @@ npm version patch                      # or minor; keep it in step with what cha
 npm publish                            # publishConfig makes it public; prepublishOnly builds first
 ```
 
-A published version can never be reused, so run `check:pack` every time. Until
+A published version can never be reused, so run `check:pack` every time. The
+plugin depends on the core as `*`: an exact version would stop matching the
+workspace after the first bump, and npm would then install the published copy
+next to it, so `verify` would test the plugin against old code. Until
 the host-token and selector gaps in `ROADMAP.md` are closed, keep the version at
 `0.x`: the exported surface is allowed to change.

@@ -58,6 +58,23 @@ export { isExternalRef } from './language/ditaLanguageUtils';
 export type { MapEntry } from './render/mapTypeMap';
 export type { RoleLabelFormatter, RoleLabelInfo } from './render/mapTypeMap';
 export type { KeyMapOptions } from './keyMapForDocument';
+// The rest of what the VS Code viewer imports from the copied modules: the
+// render cache, the file and key resolvers, the source overlay, the editor
+// language helpers, and the helpers its tests call. Their shapes follow the
+// viewer's needs and may change while the version is 0.x.
+export { lookupNamedEntity } from './parser/namedEntities';
+export { BASE_TYPE_RENDERERS } from './render/baseTypeMap';
+export { computeKeyrefSpacing, needsSpace } from './render/cjkSpacing';
+export { mergeProfilingAttrs, profilingChipsHtml, profilingKeysAttr } from './render/renderer';
+export { resolveConkeyref } from './editor/conkeyref';
+export { collectMapKeys, isKeyContextAvailable, keySourceMaps, qualifiedNames, qualifiedNamesMulti } from './editor/keySpace';
+export { DEFAULT_NOTE_LABELS, IMAGE_DIMENSIONS_CACHE_MAX, URL_SCHEME_RE, ZH_NOTE_LABELS, clearImageDimensionsCache, detectIndexLabel, detectNoteLabels, expandDitamapRefs, makeConrefRangeResolver, makeConrefResolver, makeFileCache, makeFileTitleResolver, makeIsInCurrentBook, readImageDimensions } from './editor/refResolvers';
+export type { FileReader } from './editor/refResolvers';
+export { buildRenderContext } from './editor/renderContext';
+export { clearAllSourceOverlays, dependsOn, noteSourceDependencies, sourceOverlaySize, sourceStamp, trackSourceReads } from './editor/sourceText';
+export { TOPIC_RENDER_CACHE_MAX_BYTES, clearTopicRenderCache, collectText, renderTopicCached, renderTopicToHtml, setTopicRenderCacheBudgetForTesting, stampFiles, topicRenderCacheBytesHeld, topicRenderCacheSize } from './editor/topicRender';
+export { collectMapSymbols, collectTopicSymbols, collectUnknownElements, findConrefTargetOffset, findEnclosingKeydefKeys, findIdAttrAt, findKeyDefinitionOffset, findKeysAttrAt, findRefAttrAt, findUnclosedTag, getAttributesForTag, getAutoCloseTag, getCloseTagCompletion, getCompletionContext, getMapRefName, stripSameDocumentFragmentPrefix } from './language/ditaLanguageUtils';
+export type { DocSymbolSpec } from './language/ditaLanguageUtils';
 
 /**
  * Host tokens the stylesheet reads (styles/dita-content.css). A host defines

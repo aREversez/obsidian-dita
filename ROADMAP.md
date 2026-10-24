@@ -109,12 +109,16 @@ values is unticked; this one follows DITA-OT (every value of one attribute).
   - [x] Make the package publishable: metadata, LICENSE, no source maps, the
         parser and renderer entry points the extension imports are exported,
         `npm run check:pack` installs the tarball into an empty project.
-  - [ ] Publish `@dita-viewer/core` to npm (needs the `@dita-viewer` npm
-        organisation; steps are in `packages/dita-core/README.md`).
+  - [x] Publish `@dita-viewer/core` to npm: 0.1.0 is out. It turned out to
+        export too little; the extension now imports 107 distinct symbols from
+        the copied modules (99 in `src`, 8 more only in tests) and 0.1.0 had 46
+        of them.
+  - [ ] Publish 0.2.0, which exports the remaining 61 (`src/index.ts`, pinned
+        by `test/publicApi.test.ts`). The release workflow publishes it when
+        the next plugin tag is pushed, or run the steps in
+        `packages/dita-core/README.md`.
   - [ ] In the extension: depend on the package, replace its imports of the
-        copied modules (67 symbols; 48 were not exported before, 29 of them
-        only by tests, still to be decided), delete the copies, and adjust its
-        build and tests.
+        copied modules, delete the copies, and adjust its build and tests.
 
 
 ## Out of scope for now
