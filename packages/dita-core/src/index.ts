@@ -43,6 +43,18 @@ export {
 } from './profiling';
 export type { Ditaval, DitavalAction, DitavalRule, ProfileFilter, ProfileGroup, ProfileValues } from './profiling';
 export { collectMapEntries, getMapTitleText } from './render/mapTypeMap';
+// The parser and renderer entry points a host that renders by itself needs, and
+// what they take and return. Everything the VS Code viewer imports from the
+// copied modules is here, so it can depend on this package instead of copying.
+export { parseDita, parseDitamap, preprocessEntities } from './parser/ditaParser';
+export type { DitaDocument, DitaNode, SourceRange } from './parser/domTypes';
+export { STANDARD_TAG_TO_BASETYPE } from './parser/standardTagMap';
+export { MAP_STANDARD_TAG_TO_BASETYPE } from './parser/mapTagMap';
+export { renderDocument, renderElement } from './render/renderer';
+export type { RenderContext } from './render/renderer';
+export { collectIndextermChips, findTopLevelIndextermsInSubtree } from './render/baseTypeMap';
+export { createBookRoleLabeler, extractText, getDisplayNameInfo, isDitamapRef, renderMapDocument } from './render/mapTypeMap';
+export { isExternalRef } from './language/ditaLanguageUtils';
 export type { MapEntry } from './render/mapTypeMap';
 export type { RoleLabelFormatter, RoleLabelInfo } from './render/mapTypeMap';
 export type { KeyMapOptions } from './keyMapForDocument';

@@ -2,22 +2,52 @@
   "name": "@dita-viewer/core",
   "version": "0.1.0",
   "description": "Host-neutral DITA parsing and HTML rendering core, shared by the VS Code DITA Viewer and obsidian-dita.",
+  "keywords": [
+    "dita",
+    "dita-ot",
+    "xml",
+    "documentation",
+    "renderer",
+    "obsidian",
+    "vscode"
+  ],
+  "homepage": "https://github.com/aREversez/obsidian-dita/tree/main/packages/dita-core#readme",
+  "bugs": {
+    "url": "https://github.com/aREversez/obsidian-dita/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aREversez/obsidian-dita.git",
+    "directory": "packages/dita-core"
+  },
   "license": "MIT",
+  "author": "aREversez",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
     "./styles/dita-content.css": "./styles/dita-content.css",
     "./styles/TOKENS.md": "./styles/TOKENS.md"
   },
-  "files": ["dist", "styles"],
+  "files": [
+    "dist",
+    "styles",
+    "!dist/**/*.map"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "tsc -p tsconfig.build.json",
     "pretest": "node -e \"require('fs').rmSync('dist-test',{recursive:true,force:true})\" && tsc -p tsconfig.test.json",
-    "test": "mocha --config .mocharc.json"
+    "test": "mocha --config .mocharc.json",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "sax": "^1.4.1"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

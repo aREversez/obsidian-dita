@@ -13,6 +13,7 @@
     "typecheck": "npm run typecheck -w @dita-viewer/core && npm run typecheck -w obsidian-dita",
     "test": "npm test -w @dita-viewer/core && npm test -w obsidian-dita && node --test scripts/release.test.mjs",
     "release:check": "node scripts/check-release.mjs",
+    "check:pack": "node scripts/check-pack.mjs",
     "verify": "npm run typecheck && npm test && npm run build && npm run release:check"
   },
   "devDependencies": {

@@ -105,8 +105,16 @@ values is unticked; this one follows DITA-OT (every value of one attribute).
         friends; decide whether VS Code accepts the merged colours or the core
         gets finer tokens; (3) `--dita-border` and `--dita-selected-fg` are
         defined upstream but no shared rule there reads them yet.
-  - [ ] Publish `@dita-viewer/core` to npm, then replace the extension's 118
-        imports of the copied modules and delete its copies.
+  - [x] Make the package publishable: metadata, LICENSE, no source maps, the
+        parser and renderer entry points the extension imports are exported,
+        `npm run check:pack` installs the tarball into an empty project.
+  - [ ] Publish `@dita-viewer/core` to npm (needs the `@dita-viewer` npm
+        organisation; steps are in `packages/dita-core/README.md`).
+  - [ ] In the extension: depend on the package, replace its imports of the
+        copied modules (67 symbols; 48 were not exported before, 29 of them
+        only by tests, still to be decided), delete the copies, and adjust its
+        build and tests.
+
 
 ## Out of scope for now
 
