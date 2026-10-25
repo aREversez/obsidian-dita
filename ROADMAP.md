@@ -98,16 +98,16 @@ values is unticked; this one follows DITA-OT (every value of one attribute).
         VS Code answers in one `:root` block at the top of that file (upstream;
         28 declarations, rendering unchanged). Not yet equal to
         `dita-content.css`, see the gaps below.
-  - [ ] Close the style gaps before the extension takes its content rules from
-        this package: (1) selectors: upstream styles `body`, `:root`, `html.dv-*`,
-        this package `.dita-body` and `:host`, so VS Code needs the `dita-body`
-        class on its body (or the core rules need an alias for both); (2) the 11
-        declarations behind the image button, context menu and toast
-        (`dropdown-*`, `menu-*`, `notifications-*`) are still `--vscode-*`
-        upstream because this package folds them into `--dita-bg-elevated` and
-        friends; decide whether VS Code accepts the merged colours or the core
-        gets finer tokens; (3) `--dita-border` and `--dita-selected-fg` are
-        defined upstream but no shared rule there reads them yet.
+  - [x] Close the style gaps between the extension's `media/styles.css` and
+        this package's stylesheet (upstream; ships with the next core release):
+        (1) the core rules for `body` and `html.dv-*` also match `.dita-body`
+        and `:host(.dv-*)`; (2) the image button, context menu and toast read
+        finer tokens (`--dita-btn-*`, `--dita-menu-*`, `--dita-toast-*`) that
+        fall back to the shared ones, so this plugin's adapter does not have to
+        define them; (3) `--dita-border` and `--dita-selected-fg` are now read
+        by the extension's rules too. The extension still keeps its own copy of
+        the rules; a test there fails if the tokens the two read drift apart.
+        `theme.test.ts` here treats the new tokens as optional.
   - [x] Make the package publishable: metadata, LICENSE, no source maps, the
         parser and renderer entry points the extension imports are exported,
         `npm run check:pack` installs the tarball into an empty project.

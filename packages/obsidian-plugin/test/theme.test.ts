@@ -23,6 +23,7 @@ describe('theme contract', () => {
   it('adapter defines every --dita-* host token the core stylesheet reads', () => {
     const read = new Set(stripComments(coreCss).match(/var\((--dita-[\w-]+)/g)?.map((m) => m.slice(4)) ?? []);
     read.delete('--dita-scale'); // per-image size hint set inline by the renderer, not a host token
+    for (const t of [...read]) if (/^--dita-(btn|menu|toast)-/.test(t)) read.delete(t); // optional: fall back to the shared tokens (TOKENS.md)
     const missing = [...read].filter((t) => !(t in hostDecls));
     assert.deepEqual(missing, [], `adapter does not define: ${missing.join(', ')}`);
   });
