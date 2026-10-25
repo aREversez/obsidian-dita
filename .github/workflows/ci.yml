@@ -1,0 +1,41 @@
+# Typecheck, test and build on every push and pull request to main or dev, so a
+# change is checked before a release tag is. The release workflow runs the same
+# `npm run verify` again on the tagged commit.
+
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        # The plugin is desktop-only and its author works on Windows, so the
+        # path handling in the build, the tests and the scripts runs on both.
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Typecheck, all tests, the bundle, and the manifest checks.
+      - run: npm run verify
