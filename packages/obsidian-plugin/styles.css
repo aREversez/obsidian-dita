@@ -11,6 +11,20 @@
   position: relative;
 }
 
+/* Obsidian's .view-content pads itself and scrolls (it turns both off for
+   markdown views). The preview is its own scroller, so that second one shows up
+   as a duplicate scrollbar; the pane's bottom padding then scrolls as empty
+   space over the end of the text. DitaView marks its pane `dita-pane` so this
+   rule outranks the stock one whatever order the sheets load in, and the pane
+   takes the height the header leaves rather than trusting the stock sum. */
+.workspace-leaf-content .view-content.dita-pane {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
 .dita-panes {
   flex: 1 1 auto;
   display: flex;

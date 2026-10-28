@@ -186,6 +186,12 @@ export class DitaView extends TextFileView {
   // ── lifecycle ──
 
   async onOpen(): Promise<void> {
+    // The pane is ours from edge to edge: Obsidian gives .view-content padding
+    // and a scrollbar of its own (it turns both off for markdown views), and
+    // the preview scrolls itself. Left alone, that is a second scrollbar beside
+    // the real one, with its bottom padding as blank space scrolling under the
+    // text. styles.css takes the pane back for this view type.
+    this.contentEl.addClass('dita-pane');
     this.container = this.contentEl.createDiv({ cls: 'dita-container' });
     this.errorEl = this.container.createDiv({ cls: 'dita-error' });
     this.errorEl.hide();
