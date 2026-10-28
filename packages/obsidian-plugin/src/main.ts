@@ -1,4 +1,4 @@
-import { FileSystemAdapter, Plugin } from 'obsidian';
+import { FileSystemAdapter, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
 import { join } from 'path';
 import { DitaView, VIEW_TYPE_DITA } from './DitaView';
 import { DEFAULT_SETTINGS, DitaSettings, SettingsProvider, normalizeSettings } from './settings';
@@ -6,10 +6,13 @@ import { DitaSettingTab } from './settingsTab';
 import { MODE_LABELS, VIEW_MODES, modesFor } from './viewMode';
 import { DitaFileSwitcher, SnippetPicker } from './pickers';
 import { mapMayAffect } from './mapScope';
+import { HeadingTracker, OutlineHeading } from './outlineHeadings';
+import { installOutlinePatch } from './outlinePatch';
 import { STRUCTURES, StructureSpec, WRAPS, WrapSpec } from './snippetsData';
 
 export default class DitaViewerPlugin extends Plugin implements SettingsProvider {
   settings: DitaSettings = { ...DEFAULT_SETTINGS };
+  private readonly headings = new HeadingTracker();
 
   async onload(): Promise<void> {
     this.settings = normalizeSettings(await this.loadData());
@@ -18,6 +21,11 @@ export default class DitaViewerPlugin extends Plugin implements SettingsProvider
     // Makes .dita and .ditamap files visible in the vault and opens them in the DITA view.
     this.registerExtensions(['dita', 'ditamap'], VIEW_TYPE_DITA);
     this.addSettingTab(new DitaSettingTab(this.app, this));
+    this.register(installOutlinePatch(this.app, {
+      isDita: (file) => isDitaPath(file.path),
+      headings: (file) => this.outlineHeadings(file),
+      leafFor: (outline, file) => this.leafShowing(file, (outline.leaf as { group?: string | null }).group),
+    }));
 
     for (const mode of VIEW_MODES) {
       this.addCommand({
@@ -132,6 +140,32 @@ export default class DitaViewerPlugin extends Plugin implements SettingsProvider
     await this.saveData(this.settings);
   }
 
+  /** What the Outline lists for `file`: the text on screen, so unsaved edits show too. */
+  private outlineHeadings(file: TFile): OutlineHeading[] {
+    const view = this.eachViewOf(file)[0];
+    if (!view) return this.headings.lastKnown(file.path);
+    return this.headings.headingsFor(file.path, view.getViewData(), isMapPath(file.path));
+  }
+
+  /** The DITA view an Outline row should scroll: in the Outline's own group if it has one, else the latest one. */
+  private leafShowing(file: TFile, group: string | null | undefined): WorkspaceLeaf | null {
+    const workspace = this.app.workspace;
+    const showing = workspace
+      .getLeavesOfType(VIEW_TYPE_DITA)
+      .filter((leaf) => leaf.view instanceof DitaView && leaf.view.file === file);
+    if (group) return showing.find((leaf) => (leaf as { group?: string | null }).group === group) ?? null;
+    const recent = workspace.getMostRecentLeaf();
+    return showing.find((leaf) => leaf === recent) ?? showing[0] ?? null;
+  }
+
+  private eachViewOf(file: TFile): DitaView[] {
+    const views: DitaView[] = [];
+    this.eachView((view) => {
+      if (view.file === file) views.push(view);
+    });
+    return views;
+  }
+
   private eachView(fn: (view: DitaView) => void): void {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_DITA)) {
       if (leaf.view instanceof DitaView) fn(leaf.view);
@@ -158,4 +192,8 @@ export default class DitaViewerPlugin extends Plugin implements SettingsProvider
 
 function isMapPath(path: string): boolean {
   return /\.ditamap$/i.test(path);
+}
+
+function isDitaPath(path: string): boolean {
+  return /\.dita(map)?$/i.test(path);
 }

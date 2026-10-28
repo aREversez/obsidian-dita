@@ -97,6 +97,23 @@ to return where you were. The outline re-renders when a referenced submap
 changes. Side by side, the outline follows your typing; clicking in it does not
 move the source caret.
 
+## Outline pane
+
+Obsidian's own Outline pane lists the headings of the DITA file you have open:
+for a topic, its title, nested topics and every titled section and example; for
+a `.ditamap`, the `topicref` hierarchy (the navtitle, or the file name when the
+map names none; key definitions are left out). Click a row to go there: the
+preview scrolls to it in reading view, and with the source showing the caret
+moves to that line. The list follows your typing after a short pause and keeps
+the last good one while the XML is not well-formed. The row for the heading
+under the caret is not highlighted, and "follow cursor" does nothing for DITA
+files.
+
+Obsidian offers plugins no way to feed the Outline, so this plugin wraps two
+methods of the Outline view. If a future Obsidian changes them, the plugin
+leaves the Outline alone and DITA files show "No headings found" there, as
+before; nothing else is affected.
+
 ## Conditional processing
 
 Content marked with `audience`, `platform`, `product`, `otherprops`, `props`

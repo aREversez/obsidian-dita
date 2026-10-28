@@ -19,6 +19,7 @@ import { SourceReference, positionOfId } from './references';
 import { createIdReader } from './fileIds';
 import { badgeBox, badgeHit, conrefKindOf } from './conrefJump';
 import { outlineEntryPosition } from './mapOutline';
+import { refreshOutlines } from './outlinePatch';
 import { StructureSpec, WrapSpec } from './snippetsData';
 import { insertStructure, wrapSelection } from './snippets';
 import {
@@ -131,6 +132,8 @@ export class DitaView extends TextFileView {
   /** The preview does not show the current text (it was edited while no preview was visible, or since the last render). */
   private previewStale = true;
   private readonly scheduleRender: Debounced;
+  /** The Outline pane lists headings parsed from the text, so it follows typing after a pause too. */
+  private readonly scheduleOutlineRefresh: Debounced;
   private syncFrame = 0;
   private quietUntil = 0;
   private readonly idReader = createIdReader();
@@ -154,6 +157,7 @@ export class DitaView extends TextFileView {
     super(leaf);
     this.mode = plugin.settings.defaultMode;
     this.scheduleRender = debounce(() => void this.render(), () => this.plugin.settings.previewDelayMs);
+    this.scheduleOutlineRefresh = debounce(() => refreshOutlines(this.app, this.file), () => this.plugin.settings.previewDelayMs);
   }
 
   getViewType(): string {
@@ -257,6 +261,7 @@ export class DitaView extends TextFileView {
 
   async onClose(): Promise<void> {
     this.scheduleRender.cancel();
+    this.scheduleOutlineRefresh.cancel();
     if (this.syncFrame) cancelAnimationFrame(this.syncFrame);
     this.profilePanel?.destroy();
     this.editor?.destroy();
@@ -282,9 +287,14 @@ export class DitaView extends TextFileView {
       this.resetSiteState();
     }
     this.scheduleRender.cancel();
-    if (!this.editor) return; // onOpen has not run yet; it seeds the editor from this.data
+    if (!this.editor) {
+      // onOpen has not run yet; it seeds the editor from this.data
+      refreshOutlines(this.app, this.file);
+      return;
+    }
     this.editor.load(data, clear);
     this.previewStale = true;
+    refreshOutlines(this.app, this.file);
     this.applyPendingReveal();
     // A load is not a keystroke: show it now rather than after the typing delay.
     if (panesFor(this.mode).preview) void this.render();
@@ -358,11 +368,15 @@ export class DitaView extends TextFileView {
 
   /** Where to put the caret when another view opens this file (conref jump, Ctrl/Cmd+click). */
   setEphemeralState(state: unknown): void {
-    const saved = (state ?? {}) as { ditaLine?: unknown; ditaCol?: unknown; ditaId?: unknown };
+    const saved = (state ?? {}) as { ditaLine?: unknown; ditaCol?: unknown; ditaId?: unknown; line?: unknown };
     const line = typeof saved.ditaLine === 'number' && Number.isFinite(saved.ditaLine) ? saved.ditaLine : undefined;
     const col = typeof saved.ditaCol === 'number' && Number.isFinite(saved.ditaCol) ? saved.ditaCol : undefined;
     const id = typeof saved.ditaId === 'string' && saved.ditaId ? saved.ditaId : undefined;
-    if (line === undefined && id === undefined) return;
+    if (line === undefined && id === undefined) {
+      // A plain `line` is how Obsidian's own Outline (and a link to a line) asks for a position.
+      if (typeof saved.line === 'number' && Number.isFinite(saved.line)) this.goToLine(saved.line);
+      return;
+    }
     this.pendingReveal = { line, col, id };
     this.applyPendingReveal();
   }
@@ -594,6 +608,7 @@ export class DitaView extends TextFileView {
     this.data = text;
     this.requestSave();
     this.previewStale = true;
+    this.scheduleOutlineRefresh();
     if (panesFor(this.mode).preview) this.scheduleRender();
   }
 
@@ -1399,6 +1414,26 @@ export class DitaView extends TextFileView {
     // A pane that was hidden needs a frame to be laid out before it can scroll.
     if (visible) reveal();
     else requestAnimationFrame(reveal);
+  }
+
+  /**
+   * Scroll to a source line the way the other panes do: put the caret there
+   * when the source is showing, otherwise move the preview without switching
+   * views. A view with nothing in its preview to scroll to (a map's outline
+   * tree) falls back to showing the source.
+   */
+  private goToLine(line: number): void {
+    if (!this.editor) return;
+    if (panesFor(this.mode).editor) {
+      this.showSource(line, 0);
+      return;
+    }
+    const offset = previewOffsetForLine(this.measureAnchors(), line);
+    if (offset === undefined) {
+      this.showSource(line, 0);
+      return;
+    }
+    this.scroller.scrollTop = Math.max(0, offset);
   }
 
   /** Apply a reveal that arrived with the file (setEphemeralState) once its text is here. */

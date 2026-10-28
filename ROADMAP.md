@@ -18,6 +18,12 @@ starting work; update the checkboxes in the same change that finishes an item.
 - [x] `.ditamap` outline view in the same three modes; click to open a topic.
 - [x] Conditional processing: `.ditaval` and hand-picked profiling values in the
       preview, outline, site and book views (Phase 3 below).
+- [x] Obsidian's Outline pane lists the headings of an open `.dita` / `.ditamap`
+      and scrolls to them on click. Obsidian has no hook for this, so the
+      plugin wraps `getHeadings` and `findCorrespondingLeaf` on the Outline
+      view's prototype (`outlinePatch.ts`), guarded so that a changed Outline
+      leaves it alone. Unit-tested against a stand-in view and checked against
+      the 1.14.5 bundle's source; not yet tried in a running Obsidian.
 
 ## Next
 
