@@ -60,6 +60,11 @@ export function renderDitaFile(input: RenderFileInput): RenderFileResult {
       // The tint carries the reuse badge the preview turns into a jump to the
       // source of the reused element (DitaView.jumpToConref).
       markConrefs: true,
+      // Cross-file xrefs and related links come out as real links carrying
+      // data-dita-href (DitaView.onClick opens them) instead of the dead
+      // xref-external hint. Only the single-topic preview sets this; the book
+      // and site renders have their own xref shapes.
+      clickableExternalXrefs: true,
     });
     return { html: result.html, title: result.title, error: result.error, dependencies };
   } catch (e) {

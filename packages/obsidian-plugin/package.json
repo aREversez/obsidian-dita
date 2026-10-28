@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@codemirror/lang-xml": "^6.1.0",
-    "@dita-viewer/core": "0.2.0"
+    "@dita-viewer/core": "0.2.2"
   },
   "devDependencies": {
     "@codemirror/autocomplete": "^6.20.4",

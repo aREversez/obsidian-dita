@@ -1185,6 +1185,19 @@ export class DitaView extends TextFileView {
       else this.jumpInBook(target);
       return;
     }
+    // A cross-file xref or related link in the single-topic preview: its href
+    // is only the "#" placeholder, the real target is in data-dita-href.
+    const linked = (evt.target as Element | null)?.closest('a[data-dita-href]');
+    if (linked && this.file) {
+      evt.preventDefault();
+      const target = linked.getAttribute('data-dita-href') ?? '';
+      if (/^(https?:|mailto:)/i.test(target)) window.open(target, '_blank');
+      else if (target && !target.startsWith('#')) {
+        const section = linked.closest('[data-dita-book-file]');
+        this.openRelative(target, evt, section?.getAttribute('data-dita-book-file') ?? undefined);
+      }
+      return;
+    }
     const a = (evt.target as Element | null)?.closest('a[href]');
     if (!a || !this.file) {
       this.jumpToSource(evt);

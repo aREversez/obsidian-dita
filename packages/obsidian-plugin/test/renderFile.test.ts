@@ -67,6 +67,21 @@ describe('renderDitaFile', () => {
     assert.ok(r.dependencies.has(join(vault, 'topics', 't.dita')), 'the topic itself is a dependency');
   });
 
+  it('makes a cross-file xref a clickable link carrying its target', () => {
+    const r = render('t.dita', TOPIC('<p>See <xref href="other.dita#o1/step">other</xref></p>'));
+    assert.match(r.html, /data-dita-href="other\.dita#o1\/step"/);
+    assert.doesNotMatch(r.html, /xref-external/);
+  });
+
+  it('gives a keyref-only xref the href of its key', () => {
+    writeFileSync(
+      join(vault, 'maps', 'main.ditamap'),
+      '<?xml version="1.0"?><map><title>M</title><keydef keys="guide" href="../topics/guide.dita"/></map>',
+    );
+    const r = render('t.dita', TOPIC('<p>Read <xref keyref="guide"/></p>'));
+    assert.match(r.html, /data-dita-href="guide\.dita"/);
+  });
+
   it('reports a parse failure instead of throwing', () => {
     const r = render('bad.dita', '<concept><title>x</concept>');
     assert.ok(r.error || r.html === '' || /x/.test(r.html), 'returns a result either way');
