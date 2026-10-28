@@ -7,7 +7,7 @@ import { MODE_LABELS, VIEW_MODES, modesFor } from './viewMode';
 import { DitaFileSwitcher, SnippetPicker } from './pickers';
 import { mapMayAffect } from './mapScope';
 import { HeadingTracker, OutlineHeading } from './outlineHeadings';
-import { installOutlinePatch } from './outlinePatch';
+import { installOutlinePatch, pickOutlineLeaf } from './outlinePatch';
 import { STRUCTURES, StructureSpec, WRAPS, WrapSpec } from './snippetsData';
 
 export default class DitaViewerPlugin extends Plugin implements SettingsProvider {
@@ -125,9 +125,15 @@ export default class DitaViewerPlugin extends Plugin implements SettingsProvider
     // already has; those are not changes, so the other three wait for the layout.
     this.app.workspace.onLayoutReady(() => {
       this.registerEvent(this.app.vault.on('create', (file) => this.onVaultChange(file.path, isMapPath(file.path))));
-      this.registerEvent(this.app.vault.on('delete', (file) => this.onVaultChange(file.path, isMapPath(file.path))));
+      this.registerEvent(
+        this.app.vault.on('delete', (file) => {
+          this.headings.forget(file.path);
+          this.onVaultChange(file.path, isMapPath(file.path));
+        }),
+      );
       this.registerEvent(
         this.app.vault.on('rename', (file, oldPath) => {
+          this.headings.forget(oldPath);
           const map = isMapPath(file.path) || isMapPath(oldPath);
           this.onVaultChange(oldPath, map);
           this.onVaultChange(file.path, map);
@@ -147,15 +153,13 @@ export default class DitaViewerPlugin extends Plugin implements SettingsProvider
     return this.headings.headingsFor(file.path, view.getViewData(), isMapPath(file.path));
   }
 
-  /** The DITA view an Outline row should scroll: in the Outline's own group if it has one, else the latest one. */
+  /** The DITA view an Outline row should scroll (rules in pickOutlineLeaf). */
   private leafShowing(file: TFile, group: string | null | undefined): WorkspaceLeaf | null {
     const workspace = this.app.workspace;
     const showing = workspace
       .getLeavesOfType(VIEW_TYPE_DITA)
       .filter((leaf) => leaf.view instanceof DitaView && leaf.view.file === file);
-    if (group) return showing.find((leaf) => (leaf as { group?: string | null }).group === group) ?? null;
-    const recent = workspace.getMostRecentLeaf();
-    return showing.find((leaf) => leaf === recent) ?? showing[0] ?? null;
+    return pickOutlineLeaf(showing, group, (leaf) => (leaf as { group?: string | null }).group, workspace.getMostRecentLeaf());
   }
 
   private eachViewOf(file: TFile): DitaView[] {

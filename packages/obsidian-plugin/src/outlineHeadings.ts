@@ -8,12 +8,26 @@
 //
 // Free of Obsidian imports so it is unit-tested.
 
-import { collectMapSymbols, collectTopicSymbols, parseDita, parseDitamap, preprocessEntities } from '@dita-viewer/core';
-import type { DocSymbolSpec } from '@dita-viewer/core';
+import {
+  collectMapSymbols,
+  collectTopicSymbols,
+  getMapTitleText,
+  parseDita,
+  parseDitamap,
+  preprocessEntities,
+} from '@dita-viewer/core';
+import type { DitaNode, DocSymbolSpec } from '@dita-viewer/core';
 
 export interface HeadingPos {
-  /** Zero-based. */
+  /** Zero-based, exact. */
   line: number;
+  /**
+   * Approximate: the core swaps a named entity (`&nbsp;`) for one character
+   * before parsing, so on a line that has one before the element these are a
+   * few characters short. Only `line` is used (the Outline scrolls to a line);
+   * Obsidian's other uses of the offset work on Markdown's cache, which a
+   * DITA file never has.
+   */
   col: number;
   offset: number;
 }
@@ -71,18 +85,37 @@ function toPos(starts: readonly number[], textLength: number, line: number, col:
   return { line: l, col, offset: Math.min(textLength, starts[l] + Math.max(0, col)) };
 }
 
+/** `line:col` of an element's start, how the symbols and the parsed tree are matched up. */
+const keyOf = (r: { startLine: number; startCol: number }): string => `${r.startLine}:${r.startCol}`;
+
+/** Elements marked processing-role="resource-only": in the map for their keys, not part of the book. */
+function resourceOnly(node: DitaNode, found = new Set<string>()): Set<string> {
+  if (node.type !== 'element') return found;
+  if (node.attributes?.['processing-role'] === 'resource-only') found.add(keyOf(node.sourceRange));
+  for (const child of node.children) resourceOnly(child, found);
+  return found;
+}
+
 function flatten(
   symbols: readonly DocSymbolSpec[],
   depth: number,
   out: OutlineHeading[],
   at: (line: number, col: number) => HeadingPos,
+  skip: ReadonlySet<string>,
 ): void {
   for (const s of symbols) {
-    // Key definitions are plumbing, not a table of contents.
-    if (s.kind === 'keydef') continue;
+    // Key definitions and resource-only references (with what they contain)
+    // are plumbing, not a table of contents.
+    if (s.kind === 'keydef' || skip.has(keyOf(s.range))) continue;
+    // A bookmap's frontmatter / backmatter / booklists are containers with no
+    // name of their own: their entries belong to the level above.
+    if (s.kind === 'structural') {
+      flatten(s.children, depth, out, at, skip);
+      continue;
+    }
     // A section with no title has no heading; what it holds belongs to the level above.
     if (s.kind === 'section' && UNTITLED.has(s.name)) {
-      flatten(s.children, depth, out, at);
+      flatten(s.children, depth, out, at, skip);
       continue;
     }
     out.push({
@@ -90,8 +123,16 @@ function flatten(
       level: Math.min(depth + 1, MAX_LEVEL),
       position: { start: at(s.range.startLine, s.range.startCol), end: at(s.range.endLine, s.range.endCol) },
     });
-    flatten(s.children, depth + 1, out, at);
+    flatten(s.children, depth + 1, out, at, skip);
   }
+}
+
+/** The map's own title element (`<booktitle>` of a bookmap, else `<title>`), for its row. */
+function mapTitle(root: DitaNode): { name: string; range: DocSymbolSpec['range'] } | undefined {
+  const name = getMapTitleText(root);
+  const el = root.children.find((c) => c.type === 'element' && c.tagName === 'booktitle') ??
+    root.children.find((c) => c.type === 'element' && c.tagName === 'title');
+  return name && el ? { name, range: el.sourceRange } : undefined;
 }
 
 /**
@@ -102,15 +143,25 @@ function flatten(
 export function ditaHeadings(text: string, isMap: boolean): OutlineHeading[] | undefined {
   const source = blankDoctype(text.replace(/^\uFEFF/, ''));
   let symbols: DocSymbolSpec[];
+  let title: ReturnType<typeof mapTitle>;
+  let skip = new Set<string>();
   try {
     const parsed = (isMap ? parseDitamap : parseDita)(preprocessEntities(source));
     symbols = isMap ? collectMapSymbols(parsed.root) : collectTopicSymbols(parsed.root);
+    if (isMap) {
+      title = mapTitle(parsed.root);
+      skip = resourceOnly(parsed.root);
+    }
   } catch {
     return undefined;
   }
   const starts = lineStarts(source);
+  const at = (line: number, col: number): HeadingPos => toPos(starts, source.length, line, col);
   const out: OutlineHeading[] = [];
-  flatten(symbols, 0, out, (line, col) => toPos(starts, source.length, line, col));
+  // A topic's title is its first row; a map has none among its symbols, so
+  // it gets one and its entries nest under it.
+  if (title) out.push({ heading: title.name, level: 1, position: { start: at(title.range.startLine, title.range.startCol), end: at(title.range.endLine, title.range.endCol) } });
+  flatten(symbols, title ? 1 : 0, out, at, skip);
   return out;
 }
 

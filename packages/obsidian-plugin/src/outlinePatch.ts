@@ -36,6 +36,23 @@ export interface OutlineSource {
   leafFor(outline: OutlineViewLike, file: TFile): WorkspaceLeaf | null;
 }
 
+/**
+ * Which pane a click on an Outline row scrolls, with the original's rules: an
+ * Outline linked to a group of panes ("Open linked outline") looks only in
+ * that group; an ordinary one, which has no group, follows the active file
+ * view. `recent` stands in for the latter. Nothing found is null, and the
+ * Outline then opens the file in a pane of its own.
+ */
+export function pickOutlineLeaf<T>(
+  showing: readonly T[],
+  group: string | null | undefined,
+  groupOf: (leaf: T) => string | null | undefined,
+  recent: T | null,
+): T | null {
+  if (group) return showing.find((leaf) => groupOf(leaf) === group) ?? null;
+  return showing.find((leaf) => leaf === recent) ?? showing[0] ?? null;
+}
+
 function isPatchable(proto: unknown): proto is OutlineViewLike {
   const p = proto as Partial<OutlineViewLike> | null;
   return !!p && typeof p.getHeadings === 'function' && typeof p.findCorrespondingLeaf === 'function';
@@ -116,7 +133,7 @@ export function installOutlinePatch(app: App, source: OutlineSource): () => void
       }
       const proto: unknown = Object.getPrototypeOf(leaf.view);
       if (!isPatchable(proto)) {
-        console.debug('DITA Viewer: the Outline view has changed shape; DITA headings stay off the Outline.');
+        console.warn('DITA Viewer: the Outline view has changed shape; DITA headings stay off the Outline.');
         patched = true; // do not look again and log again
         return;
       }

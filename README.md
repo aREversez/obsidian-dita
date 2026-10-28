@@ -101,8 +101,10 @@ move the source caret.
 
 Obsidian's own Outline pane lists the headings of the DITA file you have open:
 for a topic, its title, nested topics and every titled section and example; for
-a `.ditamap`, the `topicref` hierarchy (the navtitle, or the file name when the
-map names none; key definitions are left out). Click a row to go there: the
+a `.ditamap`, the map's title with the `topicref` hierarchy under it (the
+navtitle, or the file name when the map names none; key definitions,
+`resource-only` references and a bookmap's frontmatter / backmatter containers
+are left out). Click a row to go there: the
 preview scrolls to it in reading view, and with the source showing the caret
 moves to that line. The list follows your typing after a short pause and keeps
 the last good one while the XML is not well-formed. The row for the heading

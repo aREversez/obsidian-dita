@@ -1,5 +1,5 @@
 import { strict as assert } from 'assert';
-import { installOutlinePatch, refreshOutlines } from '../src/outlinePatch';
+import { installOutlinePatch, pickOutlineLeaf, refreshOutlines } from '../src/outlinePatch';
 import type { OutlineSource } from '../src/outlinePatch';
 
 // A stand-in for Obsidian's Outline view: the two methods the patch wraps.
@@ -167,5 +167,33 @@ describe('refreshOutlines', () => {
     refreshOutlines(app, null);
     assert.equal(a.updates, 2);
     assert.equal(b.updates, 1);
+  });
+});
+
+describe('pickOutlineLeaf', () => {
+  type Leaf = { name: string; group?: string };
+  const a: Leaf = { name: 'a', group: 'g1' };
+  const b: Leaf = { name: 'b' };
+  const c: Leaf = { name: 'c', group: 'g2' };
+  const groupOf = (l: Leaf) => l.group;
+
+  it('takes the most recent pane for an Outline that is not linked, as in the usual sidebar layout', () => {
+    assert.equal(pickOutlineLeaf([a, b, c], undefined, groupOf, c), c);
+    assert.equal(pickOutlineLeaf([a, b, c], null, groupOf, b), b);
+  });
+
+  it('falls back to the first pane showing the file when the most recent one does not', () => {
+    assert.equal(pickOutlineLeaf([a, b], undefined, groupOf, c), a);
+    assert.equal(pickOutlineLeaf([a, b], undefined, groupOf, null), a);
+  });
+
+  it('looks only in its own group for a linked Outline, like the original', () => {
+    assert.equal(pickOutlineLeaf([a, b, c], 'g2', groupOf, a), c);
+    assert.equal(pickOutlineLeaf([a, b], 'g2', groupOf, a), null);
+  });
+
+  it('finds nothing when no pane shows the file', () => {
+    assert.equal(pickOutlineLeaf([], undefined, groupOf, a), null);
+    assert.equal(pickOutlineLeaf([], 'g1', groupOf, a), null);
   });
 });

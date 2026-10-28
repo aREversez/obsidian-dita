@@ -89,13 +89,34 @@ describe('ditaHeadings: maps', () => {
     '</map>',
   ].join('\n');
 
-  it('lists the topicref hierarchy and leaves key definitions out', () => {
+  it('lists the map title, then the topicref hierarchy under it, without key definitions', () => {
     assert.deepEqual(outline(map, true), [
-      '1|Introduction|3',
-      '2|deep.dita|4',
-      '1|Reference|6',
-      '2|API|7',
+      '1|Guide|1',
+      '2|Introduction|3',
+      '3|deep.dita|4',
+      '2|Reference|6',
+      '3|API|7',
     ]);
+  });
+
+  const bookmap = [
+    '<bookmap>',
+    '  <booktitle><mainbooktitle>Manual</mainbooktitle></booktitle>',
+    '  <frontmatter>',
+    '    <mapref href="keys.ditamap" processing-role="resource-only"/>',
+    '    <preface href="p.dita" navtitle="Preface"/>',
+    '  </frontmatter>',
+    '  <chapter href="c.dita" navtitle="Chapter"/>',
+    '  <backmatter><booklists><glossarylist/></booklists></backmatter>',
+    '</bookmap>',
+  ].join('\n');
+
+  it('titles a bookmap by its booktitle and drops containers and resource-only references', () => {
+    assert.deepEqual(outline(bookmap, true), ['1|Manual|1', '2|Preface|4', '2|Chapter|6']);
+  });
+
+  it('lists a map with no title from level 1', () => {
+    assert.deepEqual(outline('<map><topicref href="a.dita" navtitle="A"/></map>', true), ['1|A|0']);
   });
 });
 
