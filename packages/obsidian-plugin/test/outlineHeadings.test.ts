@@ -118,6 +118,30 @@ describe('ditaHeadings: maps', () => {
   it('lists a map with no title from level 1', () => {
     assert.deepEqual(outline('<map><topicref href="a.dita" navtitle="A"/></map>', true), ['1|A|0']);
   });
+
+  it('drops what a resource-only container holds, as the attribute cascades', () => {
+    const xml = [
+      '<map>',
+      '  <topicgroup processing-role="resource-only">',
+      '    <topicref href="k.dita" navtitle="Keys"/>',
+      '  </topicgroup>',
+      '  <topicref href="a.dita" navtitle="A"/>',
+      '</map>',
+    ].join('\n');
+    assert.deepEqual(outline(xml, true), ['1|A|4']);
+  });
+
+  it('lets an explicit normal put an entry back into the book', () => {
+    const xml = [
+      '<map>',
+      '  <topicgroup processing-role="resource-only">',
+      '    <topicref href="k.dita" navtitle="Keys"/>',
+      '    <topicref href="a.dita" navtitle="A" processing-role="normal"/>',
+      '  </topicgroup>',
+      '</map>',
+    ].join('\n');
+    assert.deepEqual(outline(xml, true), ['1|A|3']);
+  });
 });
 
 describe('HeadingTracker', () => {

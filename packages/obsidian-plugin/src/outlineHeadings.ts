@@ -88,11 +88,21 @@ function toPos(starts: readonly number[], textLength: number, line: number, col:
 /** `line:col` of an element's start, how the symbols and the parsed tree are matched up. */
 const keyOf = (r: { startLine: number; startCol: number }): string => `${r.startLine}:${r.startCol}`;
 
-/** Elements marked processing-role="resource-only": in the map for their keys, not part of the book. */
-function resourceOnly(node: DitaNode, found = new Set<string>()): Set<string> {
+/**
+ * Elements inside a resource-only subtree: in the map for their keys, not part
+ * of the book. The attribute cascades, and a container that yields no row of
+ * its own (topicgroup) has to mark what it holds here, since flatten never
+ * sees that container at all.
+ */
+function resourceOnly(node: DitaNode, inherited = false, found = new Set<string>()): Set<string> {
   if (node.type !== 'element') return found;
-  if (node.attributes?.['processing-role'] === 'resource-only') found.add(keyOf(node.sourceRange));
-  for (const child of node.children) resourceOnly(child, found);
+  // As the core's map walk does it: an explicit attribute wins outright, so a
+  // nested `normal` opts back into the book, and otherwise the parent's value
+  // carries down.
+  const own = node.attributes?.['processing-role'];
+  const only = own === 'resource-only' || (own !== 'normal' && inherited);
+  if (only) found.add(keyOf(node.sourceRange));
+  for (const child of node.children) resourceOnly(child, only, found);
   return found;
 }
 
