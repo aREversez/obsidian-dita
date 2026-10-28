@@ -146,11 +146,14 @@ export default class DitaViewerPlugin extends Plugin implements SettingsProvider
     await this.saveData(this.settings);
   }
 
-  /** What the Outline lists for `file`: the text on screen, so unsaved edits show too. */
+  /**
+   * What the Outline lists for `file`: the text on screen, so unsaved edits show
+   * too, and the key space its titles are read with.
+   */
   private outlineHeadings(file: TFile): OutlineHeading[] {
     const view = this.eachViewOf(file)[0];
     if (!view) return this.headings.lastKnown(file.path);
-    return this.headings.headingsFor(file.path, view.getViewData(), isMapPath(file.path));
+    return this.headings.headingsFor(file.path, view.getViewData(), isMapPath(file.path), view.outlineKeys());
   }
 
   /** The DITA view an Outline row should scroll (rules in pickOutlineLeaf). */

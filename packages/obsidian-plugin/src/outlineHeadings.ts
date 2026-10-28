@@ -11,12 +11,17 @@
 import {
   collectMapSymbols,
   collectTopicSymbols,
+  extractText,
+  getDisplayNameInfo,
   getMapTitleText,
   parseDita,
   parseDitamap,
   preprocessEntities,
 } from '@dita-viewer/core';
 import type { DitaNode, DocSymbolSpec } from '@dita-viewer/core';
+
+/** The key values of a document's key space, as the preview resolves them. */
+export type KeyLookup = ReadonlyMap<string, string>;
 
 export interface HeadingPos {
   /** Zero-based, exact. */
@@ -88,6 +93,66 @@ function toPos(starts: readonly number[], textLength: number, line: number, col:
 /** `line:col` of an element's start, how the symbols and the parsed tree are matched up. */
 const keyOf = (r: { startLine: number; startCol: number }): string => `${r.startLine}:${r.startCol}`;
 
+/** Every element of the document, by the `line:col` the symbols carry. */
+function nodeIndex(root: DitaNode): Map<string, DitaNode> {
+  const found = new Map<string, DitaNode>();
+  const walk = (node: DitaNode): void => {
+    if (node.type !== 'element') return;
+    found.set(keyOf(node.sourceRange), node);
+    for (const child of node.children) walk(child);
+  };
+  walk(root);
+  return found;
+}
+
+/** True when the element, or anything under it, stands in for a key. */
+function usesKeyref(node: DitaNode): boolean {
+  if (node.type !== 'element') return false;
+  if (node.attributes?.keyref) return true;
+  return node.children.some(usesKeyref);
+}
+
+/**
+ * The parts of an element its row's name is read from, following the core:
+ * a topicref's topicmeta (navtitle, linktext, keywords), a topic's title.
+ * Only these decide whether a name is worth recomputing, so an entry named by
+ * its href keeps the name collectMapSymbols gave it.
+ */
+function nameParts(symbol: DocSymbolSpec, node: DitaNode): DitaNode[] {
+  if (symbol.kind === 'ref' || symbol.kind === 'head') {
+    const meta = node.children.find((child) => child.type === 'element' && child.baseType === 'map/topicmeta');
+    if (!meta) return [];
+    return meta.children.filter(
+      (child) =>
+        child.type === 'element' &&
+        (child.baseType === 'map/navtitle' || child.baseType === 'map/linktext' || child.baseType === 'map/keywords'),
+    );
+  }
+  const title = node.children.find((child) => child.type === 'element' && child.baseType === 'topic/title');
+  return title ? [title] : [];
+}
+
+/**
+ * The name of an element that refers to a key, with the key's value in it: a
+ * title is often built from one (`<mainbooktitle><ph keyref="product"/>
+ * Manual</mainbooktitle>`). The core's own naming is used, so the row reads
+ * exactly as the preview's does; only elements that refer to a key go through
+ * here, since every other name has to stay what collectMapSymbols made of it.
+ */
+function namedWithKeys(
+  symbol: DocSymbolSpec,
+  node: DitaNode,
+  resolveKey: (key: string) => string | undefined,
+): string | undefined {
+  if (symbol.kind === 'ref' || symbol.kind === 'head') {
+    // Same chain collectMapSymbols uses (navtitle, linktext, ...), minus the
+    // keyword branch it does not have.
+    return getDisplayNameInfo(node, resolveKey, { keywords: false }).text || undefined;
+  }
+  const title = node.children.find((child) => child.type === 'element' && child.baseType === 'topic/title');
+  return title ? extractText(title, resolveKey).trim() || undefined : undefined;
+}
+
 /**
  * Elements inside a resource-only subtree: in the map for their keys, not part
  * of the book. The attribute cascades, and a container that yields no row of
@@ -112,6 +177,7 @@ function flatten(
   out: OutlineHeading[],
   at: (line: number, col: number) => HeadingPos,
   skip: ReadonlySet<string>,
+  nameOf: (symbol: DocSymbolSpec) => string,
 ): void {
   for (const s of symbols) {
     // Key definitions and resource-only references (with what they contain)
@@ -120,26 +186,29 @@ function flatten(
     // A bookmap's frontmatter / backmatter / booklists are containers with no
     // name of their own: their entries belong to the level above.
     if (s.kind === 'structural') {
-      flatten(s.children, depth, out, at, skip);
+      flatten(s.children, depth, out, at, skip, nameOf);
       continue;
     }
     // A section with no title has no heading; what it holds belongs to the level above.
-    if (s.kind === 'section' && UNTITLED.has(s.name)) {
-      flatten(s.children, depth, out, at, skip);
+    if (s.kind === 'section' && UNTITLED.has(nameOf(s))) {
+      flatten(s.children, depth, out, at, skip, nameOf);
       continue;
     }
     out.push({
-      heading: s.name,
+      heading: nameOf(s),
       level: Math.min(depth + 1, MAX_LEVEL),
       position: { start: at(s.range.startLine, s.range.startCol), end: at(s.range.endLine, s.range.endCol) },
     });
-    flatten(s.children, depth + 1, out, at, skip);
+    flatten(s.children, depth + 1, out, at, skip, nameOf);
   }
 }
 
 /** The map's own title element (`<booktitle>` of a bookmap, else `<title>`), for its row. */
-function mapTitle(root: DitaNode): { name: string; range: DocSymbolSpec['range'] } | undefined {
-  const name = getMapTitleText(root);
+function mapTitle(
+  root: DitaNode,
+  resolveKey?: (key: string) => string | undefined,
+): { name: string; range: DocSymbolSpec['range'] } | undefined {
+  const name = getMapTitleText(root, resolveKey);
   const el = root.children.find((c) => c.type === 'element' && c.tagName === 'booktitle') ??
     root.children.find((c) => c.type === 'element' && c.tagName === 'title');
   return name && el ? { name, range: el.sourceRange } : undefined;
@@ -149,18 +218,33 @@ function mapTitle(root: DitaNode): { name: string; range: DocSymbolSpec['range']
  * The headings of a topic or map, in document order, or undefined when the
  * text cannot be parsed (half-typed XML, an empty file): the caller keeps the
  * last good list rather than flashing an empty Outline while someone types.
+ *
+ * `keys` is the document's key space, when the caller can supply one: a title
+ * built out of a key (`<ph keyref="product"/>`) then reads in full, as it does
+ * in the preview. Without it such a reference contributes nothing, which is
+ * all this file's own text can say about it.
  */
-export function ditaHeadings(text: string, isMap: boolean): OutlineHeading[] | undefined {
+export function ditaHeadings(text: string, isMap: boolean, keys?: KeyLookup): OutlineHeading[] | undefined {
   const source = blankDoctype(text.replace(/^\uFEFF/, ''));
+  const resolveKey = keys ? (key: string): string | undefined => keys.get(key) : undefined;
   let symbols: DocSymbolSpec[];
   let title: ReturnType<typeof mapTitle>;
   let skip = new Set<string>();
+  let nameOf = (symbol: DocSymbolSpec): string => symbol.name;
   try {
     const parsed = (isMap ? parseDitamap : parseDita)(preprocessEntities(source));
     symbols = isMap ? collectMapSymbols(parsed.root) : collectTopicSymbols(parsed.root);
     if (isMap) {
-      title = mapTitle(parsed.root);
+      title = mapTitle(parsed.root, resolveKey);
       skip = resourceOnly(parsed.root);
+    }
+    if (resolveKey) {
+      const elements = nodeIndex(parsed.root);
+      nameOf = (symbol) => {
+        const node = elements.get(keyOf(symbol.range));
+        const parts = node ? nameParts(symbol, node) : [];
+        return (node && parts.some(usesKeyref) ? namedWithKeys(symbol, node, resolveKey) : undefined) ?? symbol.name;
+      };
     }
   } catch {
     return undefined;
@@ -171,7 +255,7 @@ export function ditaHeadings(text: string, isMap: boolean): OutlineHeading[] | u
   // A topic's title is its first row; a map has none among its symbols, so
   // it gets one and its entries nest under it.
   if (title) out.push({ heading: title.name, level: 1, position: { start: at(title.range.startLine, title.range.startCol), end: at(title.range.endLine, title.range.endCol) } });
-  flatten(symbols, title ? 1 : 0, out, at, skip);
+  flatten(symbols, title ? 1 : 0, out, at, skip, nameOf);
   return out;
 }
 
@@ -182,18 +266,23 @@ export function ditaHeadings(text: string, isMap: boolean): OutlineHeading[] | u
  */
 export class HeadingTracker {
   private static readonly MAX_ENTRIES = 50;
-  private readonly entries = new Map<string, { text: string; headings: OutlineHeading[] }>();
+  private readonly entries = new Map<string, { text: string; keys?: KeyLookup; headings: OutlineHeading[] }>();
 
-  headingsFor(path: string, text: string, isMap: boolean): OutlineHeading[] {
+  /**
+   * `keys` is compared by identity: the caller hands the same map while its
+   * briefly-cached key space is fresh, and a new one once it is rebuilt, so a
+   * changed keydef reaches the list without being re-read on every redraw.
+   */
+  headingsFor(path: string, text: string, isMap: boolean, keys?: KeyLookup): OutlineHeading[] {
     const hit = this.entries.get(path);
-    if (hit && hit.text === text) return hit.headings;
+    if (hit && hit.text === text && hit.keys === keys) return hit.headings;
     // Text that does not parse keeps the previous headings, and is remembered
     // so it is not parsed again for every redraw.
-    const headings = ditaHeadings(text, isMap) ?? hit?.headings ?? [];
+    const headings = ditaHeadings(text, isMap, keys) ?? hit?.headings ?? [];
     if (!hit && this.entries.size >= HeadingTracker.MAX_ENTRIES) {
       this.entries.delete(this.entries.keys().next().value as string);
     }
-    this.entries.set(path, { text, headings });
+    this.entries.set(path, { text, keys, headings });
     return headings;
   }
 

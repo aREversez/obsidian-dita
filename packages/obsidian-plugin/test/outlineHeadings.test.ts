@@ -25,8 +25,8 @@ const topic = [
   '',
 ].join('\n');
 
-const outline = (text: string, isMap = false) =>
-  (ditaHeadings(text, isMap) ?? []).map((h) => `${h.level}|${h.heading}|${h.position.start.line}`);
+const outline = (text: string, isMap = false, keys?: ReadonlyMap<string, string>) =>
+  (ditaHeadings(text, isMap, keys) ?? []).map((h) => `${h.level}|${h.heading}|${h.position.start.line}`);
 
 describe('ditaHeadings: topics', () => {
   it('lists the title, titled sections and examples, and nested topics, nested by level', () => {
@@ -144,6 +144,52 @@ describe('ditaHeadings: maps', () => {
   });
 });
 
+describe('ditaHeadings: key references in titles', () => {
+  const keys = new Map([
+    ['product-name', 'Acme Flow Engine'],
+    ['version', '2.4'],
+  ]);
+
+  const bookmap = [
+    '<bookmap>',
+    '  <booktitle><mainbooktitle><ph keyref="product-name"/> Manual</mainbooktitle></booktitle>',
+    '  <chapter href="c.dita" navtitle="Chapter"/>',
+    '</bookmap>',
+  ].join('\n');
+
+  it('fills a key into the map title, as the preview shows it', () => {
+    assert.deepEqual(outline(bookmap, true, keys), ['1|Acme Flow Engine Manual|1', '2|Chapter|2']);
+  });
+
+  it('adds nothing for a key when no key space is given', () => {
+    assert.deepEqual(outline(bookmap, true), ['1|Manual|1', '2|Chapter|2']);
+  });
+
+  it('fills a key into a topic title and into a navtitle', () => {
+    const topic = '<topic id="t"><title>Install <ph keyref="product-name"/></title></topic>';
+    assert.deepEqual(outline(topic, false, keys), ['1|Install Acme Flow Engine|0']);
+    const map = [
+      '<map>',
+      '  <topicref href="a.dita">',
+      '    <topicmeta><navtitle>Version <ph keyref="version"/></navtitle></topicmeta>',
+      '  </topicref>',
+      '</map>',
+    ].join('\n');
+    assert.deepEqual(outline(map, true, keys), ['1|Version 2.4|1']);
+  });
+
+  it('leaves a name alone when the key is not defined', () => {
+    const xml = [
+      '<map>',
+      '  <topicref href="a.dita">',
+      '    <topicmeta><navtitle>Version <ph keyref="missing"/></navtitle></topicmeta>',
+      '  </topicref>',
+      '</map>',
+    ].join('\n');
+    assert.deepEqual(outline(xml, true, keys), ['1|Version|1']);
+  });
+});
+
 describe('HeadingTracker', () => {
   it('re-parses only when the text changes', () => {
     const tracker = new HeadingTracker();
@@ -172,6 +218,17 @@ describe('HeadingTracker', () => {
     tracker.headingsFor('a.dita', topic, false);
     tracker.forget('a.dita');
     assert.deepEqual(tracker.lastKnown('a.dita'), []);
+  });
+
+  it('parses again when the key space it was given changes', () => {
+    const tracker = new HeadingTracker();
+    const xml = '<map><title><ph keyref="product"/></title></map>';
+    const first = new Map([['product', 'A']]);
+    const second = new Map([['product', 'B']]);
+    const a = tracker.headingsFor('m.ditamap', xml, true, first);
+    assert.equal(a[0]?.heading, 'A');
+    assert.equal(tracker.headingsFor('m.ditamap', xml, true, first), a);
+    assert.equal(tracker.headingsFor('m.ditamap', xml, true, second)[0]?.heading, 'B');
   });
 
   it('holds a bounded number of files', () => {

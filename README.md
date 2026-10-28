@@ -104,8 +104,10 @@ for a topic, its title, nested topics and every titled section and example; for
 a `.ditamap`, the map's title with the `topicref` hierarchy under it (the
 navtitle, or the file name when the map names none; key definitions, whatever
 is marked `resource-only` (with the entries under it) and the containers a
-bookmap wraps its frontmatter / backmatter in are left out). Click a row to go
-there: the
+bookmap wraps its frontmatter / backmatter in are left out). A title that
+carries `keyref` is read with the map's key values, the same way the preview
+reads it, so a product name in a bookmap title shows up there too. Click a row
+to go there: the
 preview scrolls to it in reading view, and with the source showing the caret
 moves to that line. The list follows your typing after a short pause and keeps
 the last good one while the XML is not well-formed. The row for the heading

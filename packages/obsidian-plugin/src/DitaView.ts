@@ -259,6 +259,15 @@ export class DitaView extends TextFileView {
     return this.envCache.env;
   }
 
+  /**
+   * The key values this file's keyrefs resolve against, for the Outline: the
+   * same briefly-cached key space the preview renders with, so a row and the
+   * page cannot show different product names.
+   */
+  outlineKeys(): ReadonlyMap<string, string> | undefined {
+    return this.completionEnv()?.keys();
+  }
+
   async onClose(): Promise<void> {
     this.scheduleRender.cancel();
     this.scheduleOutlineRefresh.cancel();
