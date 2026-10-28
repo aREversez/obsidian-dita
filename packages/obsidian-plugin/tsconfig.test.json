@@ -36,6 +36,7 @@
     "src/profileState.ts",
     "src/profileLabels.ts",
     "src/outlineHeadings.ts",
-    "src/outlinePatch.ts"
+    "src/outlinePatch.ts",
+    "src/lineEndings.ts"
   ]
 }

@@ -19,6 +19,8 @@ import { SourceReference, positionOfId } from './references';
 import { createIdReader } from './fileIds';
 import { badgeBox, badgeHit, conrefKindOf } from './conrefJump';
 import { outlineEntryPosition } from './mapOutline';
+import { detectEol, toLf, withEol } from './lineEndings';
+import type { Eol } from './lineEndings';
 import { refreshOutlines } from './outlinePatch';
 import { StructureSpec, WrapSpec } from './snippetsData';
 import { insertStructure, wrapSelection } from './snippets';
@@ -142,7 +144,7 @@ export class DitaView extends TextFileView {
   /** The view to offer as "Back" after a reveal switched this pane to split. */
   private revealReturnMode?: ViewMode;
   /** The line ending of the file on disk; the editor itself only knows \n. */
-  private eol = '\n';
+  private eol: Eol = '\n';
 
   // ── conditional processing ──
   private profile: ProfileState = { ...DEFAULT_PROFILE_STATE, hidden: [] };
@@ -288,19 +290,17 @@ export class DitaView extends TextFileView {
 
   getViewData(): string {
     const text = this.editor ? this.editor.getText() : this.data;
-    // The editor's document is always \n-separated (CodeMirror splits on
-    // \r\n|\r|\n when it loads), and this string is what Obsidian writes back
-    // to the file on save. Handing back \n unconditionally is what quietly
-    // turned a CRLF .dita file into an LF one: one keystroke, one save, and
-    // every line ending in the file changed.
-    if (this.eol === '\n') return text;
-    return text.replace(/\r\n?/g, '\n').replace(/\n/g, this.eol);
+    // The editor's document is always \n-separated, and this string is what
+    // Obsidian writes back on save and compares with the file it read. Handing
+    // back \n unconditionally is what quietly turned a CRLF .dita file into an
+    // LF one: one keystroke, one save, and every line ending changed.
+    return withEol(text, this.eol);
   }
 
   setViewData(data: string, clear: boolean): void {
     this.data = data;
     // Whatever the file uses, so a save writes it back the same way.
-    this.eol = data.includes('\r\n') ? '\r\n' : '\n';
+    this.eol = detectEol(data);
     // A leaf can be re-used for another file: a topic has no site or book view.
     if (this.file && (this.mode === 'site' || this.mode === 'book') && !this.isMapFile()) {
       this.mode = 'reading';
@@ -318,7 +318,10 @@ export class DitaView extends TextFileView {
       refreshOutlines(this.app, this.file);
       return;
     }
-    this.editor.load(data, clear);
+    // The editor's text is \n-only; handing it the file's CRLF would make an
+    // unchanged file differ from it at every line end, and the merge below
+    // would rewrite the document from the first line on.
+    this.editor.load(toLf(data), clear);
     this.previewStale = true;
     refreshOutlines(this.app, this.file);
     this.applyPendingReveal();
@@ -706,6 +709,8 @@ export class DitaView extends TextFileView {
     this.envCache = undefined;
     this.editor?.recheck();
     this.previewStale = true;
+    // A title may be built from a key this change redefined.
+    refreshOutlines(this.app, this.file);
     if (panesFor(this.mode).preview) await this.render();
     // The .ditaval or the page's values may be what changed.
     this.profilePanel?.refresh();
