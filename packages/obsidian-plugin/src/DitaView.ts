@@ -141,6 +141,8 @@ export class DitaView extends TextFileView {
   private pendingReveal?: { line?: number; col?: number; id?: string };
   /** The view to offer as "Back" after a reveal switched this pane to split. */
   private revealReturnMode?: ViewMode;
+  /** The line ending of the file on disk; the editor itself only knows \n. */
+  private eol = '\n';
 
   // ── conditional processing ──
   private profile: ProfileState = { ...DEFAULT_PROFILE_STATE, hidden: [] };
@@ -279,11 +281,20 @@ export class DitaView extends TextFileView {
   // ── TextFileView contract ──
 
   getViewData(): string {
-    return this.editor ? this.editor.getText() : this.data;
+    const text = this.editor ? this.editor.getText() : this.data;
+    // The editor's document is always \n-separated (CodeMirror splits on
+    // \r\n|\r|\n when it loads), and this string is what Obsidian writes back
+    // to the file on save. Handing back \n unconditionally is what quietly
+    // turned a CRLF .dita file into an LF one: one keystroke, one save, and
+    // every line ending in the file changed.
+    if (this.eol === '\n') return text;
+    return text.replace(/\r\n?/g, '\n').replace(/\n/g, this.eol);
   }
 
   setViewData(data: string, clear: boolean): void {
     this.data = data;
+    // Whatever the file uses, so a save writes it back the same way.
+    this.eol = data.includes('\r\n') ? '\r\n' : '\n';
     // A leaf can be re-used for another file: a topic has no site or book view.
     if (this.file && (this.mode === 'site' || this.mode === 'book') && !this.isMapFile()) {
       this.mode = 'reading';
