@@ -10,6 +10,8 @@ same rendering engine as the
 [VS Code DITA Viewer](https://github.com/aREversez/VS-Code-DITA-Viewer), whose
 repository holds its source (`packages/core`).
 
+![A ditamap in book view beside a DITA topic in reading view, showing tables, code blocks, the five note types and conditional-processing badges](media/dita-viewer-hero.png)
+
 ## Status
 
 **Preview and editing** of `.dita` topics and `.ditamap` maps, desktop only.
