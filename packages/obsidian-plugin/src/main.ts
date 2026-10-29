@@ -1,11 +1,12 @@
 import { FileSystemAdapter, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
 import { join } from 'path';
-import { DitaView, VIEW_TYPE_DITA } from './DitaView';
+import { DitaView, HOVER_SOURCE, VIEW_TYPE_DITA } from './DitaView';
 import { DEFAULT_SETTINGS, DitaSettings, SettingsProvider, normalizeSettings } from './settings';
 import { DitaSettingTab } from './settingsTab';
 import { MODE_LABELS, VIEW_MODES, modesFor } from './viewMode';
 import { DitaFileSwitcher, SnippetPicker } from './pickers';
 import { mapMayAffect } from './mapScope';
+import { registerDitaEmbed } from './ditaEmbed';
 import { HeadingTracker, OutlineHeading } from './outlineHeadings';
 import { installOutlinePatch, pickOutlineLeaf } from './outlinePatch';
 import { STRUCTURES, StructureSpec, WRAPS, WrapSpec } from './snippetsData';
@@ -21,6 +22,9 @@ export default class DitaViewerPlugin extends Plugin implements SettingsProvider
     // Makes .dita and .ditamap files visible in the vault and opens them in the DITA view.
     this.registerExtensions(['dita', 'ditamap'], VIEW_TYPE_DITA);
     this.addSettingTab(new DitaSettingTab(this.app, this));
+    // Links in the preview preview on hover (Settings > Page preview has the "require Ctrl" switch).
+    this.registerHoverLinkSource(HOVER_SOURCE, { display: 'DITA Viewer', defaultMod: true });
+    this.register(registerDitaEmbed(this.app));
     this.register(installOutlinePatch(this.app, {
       isDita: (file) => isDitaPath(file.path),
       headings: (file) => this.outlineHeadings(file),
