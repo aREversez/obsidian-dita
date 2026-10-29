@@ -278,10 +278,22 @@ committed at the repository root, where the Obsidian submission and its
 reviewers look for them.
 
 ```
-npm version 0.2.0 -w obsidian-dita --no-git-tag-version   # also updates manifest.json and versions.json
+npm run release:ship -- 0.3.0         # bump, verify, sync the root files, commit, tag
+git push && git push origin 0.3.0    # nothing is pushed for you
+```
+
+`--dry-run` runs the checks and prints the commands without executing them. The
+ship step refuses a dirty working tree, a detached HEAD and a version whose tag
+already exists locally or on origin.
+
+Step by step, which is what `release:ship` runs:
+
+```
+npm version 0.3.0 -w obsidian-dita --no-git-tag-version   # also updates manifest.json and versions.json
 npm run release:prepare                                   # build, then refresh the root copies
-git commit -am "chore: release 0.2.0"
-git tag 0.2.0 && git push && git push origin 0.2.0
+npm run verify; npm run sync:root:check                   # everything CI will demand, locally first
+git commit -am "chore: release 0.3.0"
+git tag 0.3.0
 ```
 
 `git push --follow-tags` skips lightweight tags, so the tag is pushed by name.
@@ -290,7 +302,7 @@ differs from a CI build; `.gitattributes` keeps every checkout LF and
 `sync:root:check` in CI fails a branch whose root copies drifted from the build.
 
 Pushing the tag runs `.github/workflows/release.yml`: it runs `npm run verify`,
-checks that the tag equals the manifest version (bare `0.2.0`, no `v`), rebuilds
+checks that the tag equals the manifest version (bare `0.3.0`, no `v`), rebuilds
 and syncs the root copies in the runner's own working tree, and publishes a
 GitHub release with `main.js`, `manifest.json` and `styles.css` attached at the
 flat root paths the installer downloads, so the attached bundle is the one that

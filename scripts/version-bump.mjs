@@ -5,7 +5,8 @@
 //   npm version 0.2.0 -w obsidian-dita --no-git-tag-version
 //   npm run release:prepare   # build, then refresh the root main.js and styles.css
 //
-// then commit, tag and push both; the release workflow publishes from there.
+// `npm run release:ship -- <version>` runs both steps, then commits and tags;
+// pushing the tag is manual, and the release workflow publishes from there.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';

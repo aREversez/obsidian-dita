@@ -15,6 +15,7 @@
     "typecheck": "npm run typecheck -w obsidian-dita",
     "test": "npm test -w obsidian-dita && node --test scripts/release.test.mjs",
     "release:check": "node scripts/check-release.mjs",
+    "release:ship": "node scripts/release-ship.mjs",
     "release:prepare": "npm run build && npm run sync:root",
     "verify": "npm run typecheck && npm test && npm run build && npm run release:check"
   },
