@@ -6,6 +6,12 @@
 # The tag is the bare version, with no leading "v": Obsidian and BRAT install
 # the release whose tag equals manifest.json's version.
 #
+# The job then builds, mirrors main.js/styles.css/manifest.json into the
+# repository root (where the community submission and the installer look),
+# commits that and re-points the tag at it, so the tagged tree carries the
+# flattened assets. Commits and tags pushed with GITHUB_TOKEN do not trigger
+# this workflow again, so there is no recursion.
+#
 # @dita-viewer/core is not released from here: it is published from the VS Code
 # DITA Viewer repository (tag core-<version>), and this plugin pins a version.
 
@@ -39,13 +45,36 @@ jobs:
       - name: Check the tag matches manifest.json
         run: node scripts/check-release.mjs "$GITHUB_REF_NAME"
 
+      # Obsidian loads main.js, manifest.json and styles.css from the plugin
+      # folder; the submission wants them tracked at the repository root.
+      - name: Sync the built assets into the repository root
+        run: npm run sync:root
+
+      - name: Commit and re-point the tag at the synced files
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          branch=$(git rev-parse --abbrev-ref HEAD)
+          if [ -n "$(git status --porcelain)" ]; then
+            git add main.js styles.css manifest.json
+            git commit -m "chore: sync root plugin files for $VERSION"
+            git push origin "HEAD:$branch"
+          fi
+          # Point the tag at the tagged-or-synced commit so the tag's tree
+          # always carries the root files the installer reads.
+          git tag -f "$VERSION"
+          git push -f origin "refs/tags/$VERSION"
+
+      # Re-run idempotent: an existing release is replaced, so the three
+      # assets always match the freshly synced tagged tree.
       - name: Publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.ref_name }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes \
-            packages/obsidian-plugin/dist/main.js \
-            packages/obsidian-plugin/dist/manifest.json \
-            packages/obsidian-plugin/dist/styles.css
+          gh release delete "$VERSION" --yes 2>/dev/null || true
+          gh release create "$VERSION" \
+            --target "$VERSION" --title "$VERSION" --notes "$VERSION" \
+            main.js manifest.json styles.css

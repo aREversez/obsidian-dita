@@ -1,0 +1,368 @@
+/* Plugin styles live OUTSIDE the preview's Shadow DOM: they lay out the panes
+   and style the source editor's frame. Everything inside the rendered topic is
+   styled by dita-content.css plus the theme adapter
+   (src/theme/obsidian-adapter.css). Colours here are Obsidian variables only. */
+
+.dita-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  /* The conditional processing panel floats at the top right. */
+  position: relative;
+}
+
+/* Obsidian's .view-content pads itself and scrolls (it turns both off for
+   markdown views). The preview is its own scroller, so that second one shows up
+   as a duplicate scrollbar; the pane's bottom padding then scrolls as empty
+   space over the end of the text. DitaView marks its pane `dita-pane` so this
+   rule outranks the stock one whatever order the sheets load in, and the pane
+   takes the height the header leaves rather than trusting the stock sum. */
+.workspace-leaf-content .view-content.dita-pane {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.dita-panes {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+
+.dita-source,
+.dita-scroller {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dita-source .cm-editor {
+  height: 100%;
+}
+
+.dita-scroller {
+  overflow-y: auto;
+  /* Selectable and copyable even where an ancestor disables selection; also
+     focusable by click so Ctrl+A in the preview selects the topic. */
+  -webkit-user-select: text;
+  user-select: text;
+  outline: none;
+}
+
+.dita-view {
+  min-height: 100%;
+}
+
+/* Which panes show, by mode. The editor stays mounted while hidden so its
+   undo history and scroll position survive a mode change. */
+.dita-container[data-mode="reading"] .dita-source,
+.dita-container[data-mode="site"] .dita-source,
+.dita-container[data-mode="book"] .dita-source,
+.dita-container[data-mode="source"] .dita-scroller {
+  display: none;
+}
+
+.dita-container[data-mode="split"] .dita-source {
+  border-right: 1px solid var(--background-modifier-border);
+}
+
+/* ── Site view sidebar (one topic per page) ── */
+
+.dita-site-nav {
+  display: none;
+  flex: 0 0 clamp(180px, 26%, 320px);
+  max-width: 340px;
+  min-width: 160px;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+}
+
+.dita-container[data-mode="site"] .dita-site-nav {
+  display: flex;
+}
+
+.dita-site-nav-header {
+  flex: 0 0 auto;
+  padding: var(--size-4-3, 12px) var(--size-4-3, 12px) var(--size-4-2, 8px);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.dita-site-nav-title {
+  overflow: hidden;
+  color: var(--text-normal);
+  font-size: var(--font-ui-medium, 15px);
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dita-site-nav-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--size-4-2, 8px);
+}
+
+.dita-site-nav-empty {
+  padding: var(--size-4-2, 8px);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small, 13px);
+}
+
+.dita-site-tree,
+.dita-site-children {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dita-site-children {
+  margin-left: 0.55em;
+  padding-left: 0.45em;
+  border-left: 1px solid var(--background-modifier-border);
+}
+
+.dita-site-item {
+  margin: 1px 0;
+}
+
+.dita-site-link {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35em;
+  padding: 0.28em 0.45em;
+  border-radius: var(--radius-s, 4px);
+  color: var(--text-normal);
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.dita-site-link:hover {
+  background: var(--background-modifier-hover);
+}
+
+.dita-site-link.is-active {
+  background: var(--background-modifier-hover);
+  color: var(--text-accent);
+  font-weight: 600;
+}
+
+.dita-site-role {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller, 12px);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.dita-site-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dita-site-group {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35em;
+  padding: 0.35em 0.45em 0.2em;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small, 13px);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.dita-site-group-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Header previous/next buttons are present only in site view; a disabled end
+   of the map keeps its place instead of making the other button jump. */
+.view-action.dita-site-step.is-disabled {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+/* Second line under a file's name in the DITA quick switcher. */
+.dita-suggest-path {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller, 12px);
+}
+
+/* Parse or render problem: the last good preview stays underneath. */
+.dita-error {
+  flex: 0 0 auto;
+  padding: var(--size-4-1, 4px) var(--size-4-3, 12px);
+  background-color: color-mix(in srgb, var(--text-error) 12%, var(--background-primary));
+  border-bottom: 1px solid var(--text-error);
+  color: var(--text-error);
+  font-size: var(--font-ui-small, 13px);
+  white-space: pre-wrap;
+}
+
+/* Problem dots live in their own gutter, left of the line numbers. */
+.cm-dita-problem-gutter .cm-gutterElement {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+}
+
+/* ── Conditional processing ── */
+
+/* The header button lights up while a filter is in force. */
+.view-action.dita-profile-action.is-active {
+  color: var(--text-accent);
+}
+
+.dita-profile-panel {
+  position: absolute;
+  top: var(--size-4-2, 8px);
+  right: var(--size-4-3, 12px);
+  z-index: var(--layer-popover, 30);
+  box-sizing: border-box;
+  width: min(300px, calc(100% - 24px));
+  max-height: calc(100% - 16px);
+  overflow-y: auto;
+  padding: var(--size-4-3, 12px);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m, 8px);
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small, 13px);
+}
+
+.dita-profile-title {
+  margin-bottom: var(--size-4-2, 8px);
+  font-size: var(--font-ui-medium, 15px);
+  font-weight: 600;
+}
+
+.dita-profile-file {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--size-4-1, 4px) var(--size-4-2, 8px);
+  padding-bottom: var(--size-4-2, 8px);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.dita-profile-file-label {
+  color: var(--text-muted);
+}
+
+.dita-profile-file-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dita-profile-error {
+  margin-top: var(--size-4-2, 8px);
+  color: var(--text-error);
+}
+
+.dita-profile-values {
+  padding: var(--size-4-2, 8px) 0;
+}
+
+.dita-profile-empty {
+  color: var(--text-muted);
+}
+
+.dita-profile-group-title {
+  margin: var(--size-4-2, 8px) 0 var(--size-4-1, 4px);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.dita-profile-group:first-child .dita-profile-group-title {
+  margin-top: 0;
+}
+
+.dita-profile-row {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2, 8px);
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+/* The file decides these; the box is only there to say so. */
+.dita-profile-row.is-by-file {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.dita-profile-options {
+  padding-top: var(--size-4-2, 8px);
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.dita-profile-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--size-4-2, 8px);
+  margin-top: var(--size-4-2, 8px);
+}
+
+.dita-profile-status {
+  color: var(--text-muted);
+}
+
+.dita-profile-button {
+  flex: 0 0 auto;
+}
+
+/* ── Find in the preview ── */
+
+.dita-find {
+  display: none;
+  position: absolute;
+  top: var(--size-4-2, 8px);
+  right: var(--size-4-5, 20px);
+  z-index: var(--layer-popover, 30);
+  align-items: center;
+  gap: var(--size-2-1, 2px);
+  padding: var(--size-2-2, 4px) var(--size-2-3, 6px);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m, 8px);
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+}
+
+.dita-find.is-open {
+  display: flex;
+}
+
+.dita-find-input {
+  width: 180px;
+}
+
+.dita-find.has-no-results .dita-find-input {
+  border-color: var(--text-error);
+}
+
+.dita-find-count {
+  min-width: 3.5em;
+  padding: 0 var(--size-2-2, 4px);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* The conditional processing panel opens at the same corner; it makes room. */
+.dita-container.has-find .dita-profile-panel {
+  top: calc(var(--size-4-2, 8px) + 44px);
+}

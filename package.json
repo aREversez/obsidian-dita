@@ -10,6 +10,8 @@
   "scripts": {
     "build": "npm run build -w obsidian-dita",
     "sync:test": "node scripts/sync-test-vault.mjs",
+    "sync:root": "node scripts/sync-root-files.mjs",
+    "sync:root:check": "node scripts/sync-root-files.mjs --check",
     "typecheck": "npm run typecheck -w obsidian-dita",
     "test": "npm test -w obsidian-dita && node --test scripts/release.test.mjs",
     "release:check": "node scripts/check-release.mjs",

@@ -1,8 +1,12 @@
 node_modules/
-dist/
-dist-test/
+# Build output. The community submission files (main.js, styles.css,
+# manifest.json) live at the repository root and are tracked; dist/ and the
+# root copies are regenerated from source by `npm run build` + sync-root-files.
+/packages/obsidian-plugin/dist/
+/packages/obsidian-plugin/dist-test/
+/packages/dita-core/dist/
+/packages/dita-core/dist-test/
 *.tsbuildinfo
-main.js
 .DS_Store
 
 .obsidian
