@@ -366,3 +366,20 @@
 .dita-container.has-find .dita-profile-panel {
   top: calc(var(--size-4-2, 8px) + 44px);
 }
+
+/* ── A DITA file shown inside a popover or an embed ── */
+
+.dita-embed {
+  max-height: 420px;
+  overflow-y: auto;
+  padding: var(--size-4-2, 8px) var(--size-4-4, 16px) var(--size-4-3, 12px);
+}
+
+.dita-embed-error {
+  color: var(--text-error);
+}
+
+/* A header button that does not apply to the current mode. */
+.view-action.dita-hidden {
+  display: none !important;
+}

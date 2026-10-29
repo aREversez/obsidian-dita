@@ -15,6 +15,7 @@ import { splitRefFragment } from '@dita-viewer/core';
 import { isExternalHref, resolveLinkTarget } from './linkTarget';
 import { getSheets } from './previewSheets';
 import { renderDitaFile, renderDitamapFile } from './renderFile';
+import { setRenderedHtml } from './renderedHtml';
 
 /** What Obsidian hands an embed creator. */
 export interface EmbedInfo {
@@ -94,7 +95,7 @@ export class DitaEmbed extends Component {
     const shadow = host.attachShadow({ mode: 'open' });
     shadow.adoptedStyleSheets = getSheets(host.ownerDocument);
     const body = shadow.createDiv({ cls: 'dita-body' });
-    body.innerHTML = result.html;
+    setRenderedHtml(body, result.html);
     const scheme = () => host.setAttribute('data-scheme', host.ownerDocument.body.classList.contains('theme-dark') ? 'dark' : 'light');
     scheme();
     this.registerEvent(app.workspace.on('css-change', scheme));
@@ -123,7 +124,7 @@ export class DitaEmbed extends Component {
     if (host.isConnected && host.offsetHeight > 0) {
       scroll();
     } else if (framesLeft > 0 && this.alive) {
-      requestAnimationFrame(() => this.scrollWhenShown(host, scroll, framesLeft - 1));
+      host.win.requestAnimationFrame(() => this.scrollWhenShown(host, scroll, framesLeft - 1));
     }
   }
 

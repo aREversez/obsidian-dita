@@ -378,3 +378,8 @@
 .dita-embed-error {
   color: var(--text-error);
 }
+
+/* A header button that does not apply to the current mode. */
+.view-action.dita-hidden {
+  display: none !important;
+}

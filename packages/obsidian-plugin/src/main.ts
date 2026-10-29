@@ -21,7 +21,7 @@ export default class DitaViewerPlugin extends Plugin implements SettingsProvider
     this.registerView(VIEW_TYPE_DITA, (leaf) => new DitaView(leaf, this));
     // Makes .dita and .ditamap files visible in the vault and opens them in the DITA view.
     this.registerExtensions(['dita', 'ditamap'], VIEW_TYPE_DITA);
-    this.addSettingTab(new DitaSettingTab(this.app, this));
+    this.addSettingTab(new DitaSettingTab(this.app, this, this));
     // Links in the preview preview on hover (Settings > Page preview has the "require Ctrl" switch).
     this.registerHoverLinkSource(HOVER_SOURCE, { display: 'DITA Viewer', defaultMod: true });
     this.register(registerDitaEmbed(this.app));

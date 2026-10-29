@@ -35,6 +35,7 @@ import {
   normalizeProfileState,
   resolveDitavalPath,
 } from './profileState';
+import { setRenderedHtml } from './renderedHtml';
 import { ProfilePanel } from './profilePanel';
 import type { ProfilePanelHost } from './profilePanel';
 import { DitavalPicker } from './pickers';
@@ -53,6 +54,11 @@ function hidePopover(popover: HoverPopover | null): void {
 const SYNC_QUIET_MS = 250;
 
 /** The key a keyref/conkeyref names: everything before the first '/'. */
+/** Show or hide a header button with a class, not an inline style. */
+function setShown(el: HTMLElement, shown: boolean): void {
+  el.toggleClass('dita-hidden', !shown);
+}
+
 function keyNameOf(value: string): string {
   const slash = value.indexOf('/');
   return (slash < 0 ? value : value.slice(0, slash)).trim();
@@ -232,7 +238,7 @@ export class DitaView extends TextFileView implements HoverParent {
     });
 
     this.backAction = this.addAction('arrow-left', 'Back to the previous view', () => this.goBack());
-    this.backAction.style.display = 'none';
+    setShown(this.backAction, false);
     this.sitePrevAction = this.addAction('chevron-left', 'Previous topic', () => this.stepSite(-1));
     this.sitePrevAction.addClass('dita-site-step');
     this.siteNextAction = this.addAction('chevron-right', 'Next topic', () => this.stepSite(1));
@@ -245,7 +251,7 @@ export class DitaView extends TextFileView implements HoverParent {
       this.profileHost(),
       // The header button toggles the panel itself, and the DITAVAL picker is a
       // modal: clicking in either must not count as clicking away.
-      (target) => this.profileAction.contains(target) || (target instanceof Element && target.closest('.modal-container') !== null),
+      (target) => this.profileAction.contains(target) || (target.instanceOf(Element) && target.closest('.modal-container') !== null),
       () => this.updateProfileAction(),
     );
     this.reloadDitaval();
@@ -280,11 +286,16 @@ export class DitaView extends TextFileView implements HoverParent {
     return this.completionEnv()?.keys();
   }
 
+  /** Run `cb` before the next paint of the window this view is in (a popout has its own frames). */
+  private nextFrame(cb: FrameRequestCallback): number {
+    return this.containerEl.win.requestAnimationFrame(cb);
+  }
+
   async onClose(): Promise<void> {
     this.scheduleRender.cancel();
     this.scheduleOutlineRefresh.cancel();
-    if (this.syncFrame) cancelAnimationFrame(this.syncFrame);
-    if (this.syncEditorFrame) cancelAnimationFrame(this.syncEditorFrame);
+    if (this.syncFrame) this.containerEl.win.cancelAnimationFrame(this.syncFrame);
+    if (this.syncEditorFrame) this.containerEl.win.cancelAnimationFrame(this.syncEditorFrame);
     this.find?.destroy();
     this.find = undefined;
     window.clearTimeout(this.hoverHideTimer);
@@ -454,12 +465,12 @@ export class DitaView extends TextFileView implements HoverParent {
     this.body?.classList.toggle('dita-body--site', this.mode === 'site');
     setIcon(this.modeAction, MODE_ICONS[this.mode]);
     this.modeAction.setAttribute('aria-label', MODE_LABELS[this.mode]);
-    this.sitePrevAction.style.display = this.mode === 'site' ? '' : 'none';
-    this.siteNextAction.style.display = this.mode === 'site' ? '' : 'none';
+    setShown(this.sitePrevAction, this.mode === 'site');
+    setShown(this.siteNextAction, this.mode === 'site');
     this.updateSiteNavActions();
     this.updateBackAction();
     // Conditional processing acts on the preview; with only the source showing there is nothing to filter.
-    this.profileAction.style.display = panes.preview ? '' : 'none';
+    setShown(this.profileAction, panes.preview);
     if (!panes.preview) {
       this.profilePanel?.close();
       this.find?.close();
@@ -468,7 +479,7 @@ export class DitaView extends TextFileView implements HoverParent {
     if (panes.preview && this.previewStale && this.file) void this.render();
     if (panes.editor) {
       // CodeMirror cannot measure while hidden; once visible, measure and line up the preview.
-      requestAnimationFrame(() => {
+      this.nextFrame(() => {
         this.editor.remeasure();
         if (this.mode === 'split') this.syncPreviewToEditor();
       });
@@ -485,7 +496,7 @@ export class DitaView extends TextFileView implements HoverParent {
     if (!this.backAction) return;
     const back = this.revealReturnMode;
     const show = back !== undefined && back !== this.mode;
-    this.backAction.style.display = show ? '' : 'none';
+    setShown(this.backAction, show);
     if (show) this.backAction.setAttribute('aria-label', `Back to ${MODE_LABELS[back]}`);
   }
 
@@ -569,7 +580,7 @@ export class DitaView extends TextFileView implements HoverParent {
     const active = scroller.querySelector<HTMLElement>('.dita-site-link.is-active');
     if (active) {
       // Keep the current page's row visible without moving the page itself.
-      requestAnimationFrame(() => {
+      this.nextFrame(() => {
         if (!active.isConnected) return;
         const row = active.getBoundingClientRect();
         const box = scroller.getBoundingClientRect();
@@ -595,8 +606,8 @@ export class DitaView extends TextFileView implements HoverParent {
   private updateSiteNavActions(): void {
     if (!this.sitePrevAction || !this.siteNextAction) return;
     const isSite = this.mode === 'site';
-    this.sitePrevAction.style.display = isSite ? '' : 'none';
-    this.siteNextAction.style.display = isSite ? '' : 'none';
+    setShown(this.sitePrevAction, isSite);
+    setShown(this.siteNextAction, isSite);
     if (!isSite) return;
 
     const index = this.sitePages.findIndex((page) => page.absPath === this.siteCurrent);
@@ -1001,7 +1012,7 @@ export class DitaView extends TextFileView implements HoverParent {
       return;
     }
     this.showError(undefined);
-    this.body.innerHTML = result.html;
+    setRenderedHtml(this.body, result.html);
     this.body.classList.toggle('hide-profiling', !this.profile.highlight);
     this.applyProfileFilter();
     this.find?.refresh();
@@ -1013,7 +1024,7 @@ export class DitaView extends TextFileView implements HoverParent {
     const anchor = this.sitePendingAnchor;
     this.sitePendingAnchor = undefined;
     if (anchor && this.mode === 'site') {
-      requestAnimationFrame(() => this.scrollToSiteAnchor(anchor));
+      this.nextFrame(() => this.scrollToSiteAnchor(anchor));
     }
   }
 
@@ -1043,7 +1054,7 @@ export class DitaView extends TextFileView implements HoverParent {
   private queueSyncToPreview(): void {
     if (this.mode !== 'split' || this.syncFrame || performance.now() < this.quietUntil) return;
     if (this.editorEcho.isEcho(this.editor.view.scrollDOM.scrollTop)) return;
-    this.syncFrame = requestAnimationFrame(() => {
+    this.syncFrame = this.nextFrame(() => {
       this.syncFrame = 0;
       this.syncPreviewToEditor();
     });
@@ -1075,7 +1086,7 @@ export class DitaView extends TextFileView implements HoverParent {
   private queueSyncToEditor(): void {
     if (this.mode !== 'split' || this.syncEditorFrame || performance.now() < this.quietUntil) return;
     if (this.previewEcho.isEcho(this.scroller.scrollTop)) return;
-    this.syncEditorFrame = requestAnimationFrame(() => {
+    this.syncEditorFrame = this.nextFrame(() => {
       this.syncEditorFrame = 0;
       this.syncEditorToPreview();
     });
@@ -1264,7 +1275,7 @@ export class DitaView extends TextFileView implements HoverParent {
       return;
     }
     const nearest = target?.closest('[data-line]');
-    const lineEl = (nearest && section.contains(nearest) ? nearest : section.querySelector('[data-line]')) as Element | null;
+    const lineEl = nearest && section.contains(nearest) ? nearest : section.querySelector('[data-line]');
     const line = lineEl ? Number(lineEl.getAttribute('data-line')) : 0;
     const col = lineEl ? Number(lineEl.getAttribute('data-start-col') ?? 0) : 0;
     this.openSourceBeside(file, line, col);
@@ -1568,7 +1579,7 @@ export class DitaView extends TextFileView implements HoverParent {
     };
     // A pane that was hidden needs a frame to be laid out before it can scroll.
     if (visible) reveal();
-    else requestAnimationFrame(reveal);
+    else this.nextFrame(reveal);
   }
 
   /**

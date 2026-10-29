@@ -25,7 +25,7 @@ function toCompletion(s: Suggestion): Completion {
         selection: { anchor: from + (s.cursor ?? s.insert.length) },
         userEvent: 'input.complete',
       });
-      if (s.continueAfter) setTimeout(() => startCompletion(view), 0);
+      if (s.continueAfter) window.setTimeout(() => startCompletion(view), 0);
     },
   };
 }

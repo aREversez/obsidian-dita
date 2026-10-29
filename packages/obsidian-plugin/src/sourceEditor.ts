@@ -131,10 +131,10 @@ class ProblemDot extends GutterMarker {
   }
 
   override toDOM(): Node {
-    const dot = document.createElement('span');
-    dot.className = `cm-dita-problem-dot cm-dita-problem-dot-${this.severity}`;
-    dot.title = this.severity === 'error' ? 'Error' : 'Warning';
-    return dot;
+    return createSpan({
+      cls: `cm-dita-problem-dot cm-dita-problem-dot-${this.severity}`,
+      title: this.severity === 'error' ? 'Error' : 'Warning',
+    });
   }
 }
 
@@ -168,7 +168,7 @@ const problemGutter = gutter({
 function problemScanner(lint: (text: string) => readonly ProblemRange[]): Extension {
   return ViewPlugin.fromClass(
     class {
-      private timer: ReturnType<typeof setTimeout> | undefined;
+      private timer: number | undefined;
 
       constructor(private readonly view: EditorView) {
         this.schedule();
@@ -179,17 +179,17 @@ function problemScanner(lint: (text: string) => readonly ProblemRange[]): Extens
       }
 
       destroy(): void {
-        if (this.timer !== undefined) clearTimeout(this.timer);
+        if (this.timer !== undefined) window.clearTimeout(this.timer);
       }
 
       private schedule(): void {
-        if (this.timer !== undefined) clearTimeout(this.timer);
-        this.timer = setTimeout(() => this.run(), PROBLEM_DELAY_MS);
+        if (this.timer !== undefined) window.clearTimeout(this.timer);
+        this.timer = window.setTimeout(() => this.run(), PROBLEM_DELAY_MS);
       }
 
       private run(): void {
         if (this.timer !== undefined) {
-          clearTimeout(this.timer);
+          window.clearTimeout(this.timer);
           this.timer = undefined;
         }
         const found = checkSource(this.view, lint);
@@ -252,6 +252,7 @@ const theme = EditorView.theme({
     textDecoration: 'underline wavy var(--text-warning, var(--text-muted))',
     textUnderlineOffset: '2px',
   },
+  '&.cm-editor .cm-content.cm-dita-reference-hover': { cursor: 'pointer !important' },
   '.cm-dita-problem-dot': { display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', margin: '0 2px' },
   '.cm-dita-problem-dot-error': { backgroundColor: 'var(--text-error)' },
   '.cm-dita-problem-dot-warning': { backgroundColor: 'var(--text-warning, var(--text-muted))' },
@@ -329,11 +330,11 @@ function baseExtensions(opts: SourceEditorOptions): Extension[] {
             // The pointer only changes shape; the click is handled above.
             mousemove: (evt, view) => {
               const pos = evt.ctrlKey || evt.metaKey ? view.posAtCoords({ x: evt.clientX, y: evt.clientY }) : null;
-              view.contentDOM.style.cursor = pos !== null && referenceOnLine(view, pos) ? 'pointer' : '';
+              view.contentDOM.toggleClass('cm-dita-reference-hover', pos !== null && referenceOnLine(view, pos) !== undefined);
               return false;
             },
             mouseleave: (_evt, view) => {
-              view.contentDOM.style.cursor = '';
+              view.contentDOM.removeClass('cm-dita-reference-hover');
               return false;
             },
           }),
