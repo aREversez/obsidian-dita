@@ -40,14 +40,14 @@ class Plan {
   /**
    * Run a command that changes something: printed and skipped under --dry-run.
    * Its output goes to the terminal, so a long verify is visible while it runs.
+   * `label` is how the command is shown, when the argv form is noisy.
    */
-  run(cmd, args = []) {
-    const shown = [cmd, ...args].join(' ');
+  run(cmd, args = [], label = [cmd, ...args].join(' ')) {
     if (this.dryRun) {
-      console.log(`$ ${shown}`);
+      console.log(`$ ${label}`);
       return '';
     }
-    return this.exec(cmd, args, { stream: true });
+    return this.exec(cmd, args, { stream: true, label });
   }
 
   /** Run a read-only command, in a dry run too, and return its output. */
@@ -66,17 +66,16 @@ class Plan {
     return result.status === 0 ? (result.stdout ?? '').trim() : '';
   }
 
-  exec(cmd, args, { stream }) {
+  exec(cmd, args, { stream, label = [cmd, ...args].join(' ') }) {
     const result = spawnSync(cmd, args, {
       cwd: root,
       env: childEnv(),
       encoding: 'utf8',
       stdio: stream ? 'inherit' : ['ignore', 'pipe', 'pipe'],
     });
-    const shown = [cmd, ...args].join(' ');
-    if (result.error) throw new Error(`${shown}: ${result.error.message}`);
+    if (result.error) throw new Error(`${label}: ${result.error.message}`);
     if (result.status !== 0) {
-      throw new Error(`${shown} failed (exit ${result.status})\n${(result.stderr || '').trim()}`);
+      throw new Error(`${label} failed (exit ${result.status})\n${(result.stderr || '').trim()}`);
     }
     return (result.stdout ?? '').trim();
   }
@@ -86,7 +85,7 @@ class Plan {
     if (!NPM) {
       throw new Error(`cannot find npm at ${npmCli}; run the release steps from README.md by hand.`);
     }
-    return this.run(NPM.cmd, [...NPM.prefix, ...args]);
+    return this.run(NPM.cmd, [...NPM.prefix, ...args], `npm ${args.join(' ')}`);
   }
 
   git(...args) {
@@ -124,8 +123,15 @@ function ship(plan, version) {
     'main.js',
     'styles.css',
   );
-  plan.git('commit', '-m', `chore: release ${version}`);
+  const message = `chore: release ${version}`;
+  plan.run('git', ['commit', '-m', message], `git commit -m "${message}"`);
   plan.git('tag', version);
+
+  if (plan.dryRun) {
+    console.log(`\nOn ${branch}, this plan would produce one commit and the tag ${version}.`);
+    console.log('Drop --dry-run to run it.');
+    return;
+  }
 
   console.log(`\n${version} is committed and tagged on ${branch}. Read it, then push:`);
   console.log(`  git push && git push origin ${version}`);
@@ -140,7 +146,6 @@ function main(argv) {
     throw new Error(`"${version}" is not x.y.z: a bare version, no "v", no suffix.`);
   }
   ship(new Plan(dryRun), version);
-  if (dryRun) console.log('\ndry run: the commands above were checked, not executed.');
 }
 
 try {
