@@ -115,3 +115,18 @@
 /* Text selection and focus follow the theme's accent. */
 ::selection { background: var(--text-selection, color-mix(in srgb, var(--dita-focus) 30%, transparent)); }
 :focus-visible { outline: 2px solid var(--dita-focus); outline-offset: 2px; }
+
+/* 4. Nothing may widen the page. Long unbroken text (an inline code span, a
+   file path, a URL) breaks where it must instead of running past the pane,
+   which would put a horizontal scrollbar on the whole preview. Preformatted
+   blocks do not wrap and scroll on their own, as the core sheet has it. */
+.dita-body { overflow-wrap: anywhere; }
+
+/* A formula cannot wrap (MathML has no line breaking), so one wider than the
+   page scrolls inside its own box rather than taking the page with it. */
+.dita-body .foreign-content {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  vertical-align: middle;
+}
