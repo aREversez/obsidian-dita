@@ -38,6 +38,7 @@
     "src/outlineHeadings.ts",
     "src/outlinePatch.ts",
     "src/lineEndings.ts",
-    "src/textSearch.ts"
+    "src/textSearch.ts",
+    "src/linkTarget.ts"
   ]
 }

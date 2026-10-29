@@ -92,7 +92,7 @@ export function loadDitaval(absPath: string): LoadedDitaval {
     if (code === 'ENOENT') return { error: 'The DITAVAL file does not exist.', missing: true };
     return { error: `The DITAVAL file could not be read: ${e instanceof Error ? e.message : String(e)}` };
   }
-  const ditaval = parseDitaval(text.replace(/^﻿/, ''));
+  const ditaval = parseDitaval(text.replace(/^\uFEFF/, ''));
   if (ditaval.error !== undefined) return { ditaval, error: `The DITAVAL file is not well-formed XML (${ditaval.error}).` };
   return { ditaval };
 }

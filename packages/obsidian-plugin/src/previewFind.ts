@@ -33,7 +33,7 @@ export class PreviewFind {
   private readonly caseButton: HTMLElement;
   private readonly allName: string;
   private readonly currentName: string;
-  private readonly win: Window & typeof globalThis;
+  private readonly win: typeof window;
   private ranges: Range[] = [];
   private current = -1;
   private matchCase = false;
@@ -45,7 +45,7 @@ export class PreviewFind {
     const id = nextId++;
     this.allName = `dita-find-${id}`;
     this.currentName = `dita-find-current-${id}`;
-    this.win = (host.shadow.host.ownerDocument.defaultView ?? window) as Window & typeof globalThis;
+    this.win = host.shadow.host.ownerDocument.defaultView ?? window;
 
     // The ::highlight rules have to be in the shadow tree's own styles.
     const sheet = new this.win.CSSStyleSheet();

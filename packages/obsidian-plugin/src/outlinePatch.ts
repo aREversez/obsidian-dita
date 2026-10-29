@@ -23,8 +23,10 @@ export const OUTLINE_VIEW_TYPE = 'outline';
 export interface OutlineViewLike {
   file: TFile | null;
   leaf: WorkspaceLeaf;
-  getHeadings(): unknown[];
-  findCorrespondingLeaf(): WorkspaceLeaf | null;
+  // Properties, not methods: they are read off the prototype and put back, so
+  // they must not look like methods that lose their `this` when detached.
+  getHeadings: (this: OutlineViewLike) => unknown[];
+  findCorrespondingLeaf: (this: OutlineViewLike) => WorkspaceLeaf | null;
   requestUpdate?: () => void;
 }
 
@@ -53,6 +55,20 @@ export function pickOutlineLeaf<T>(
   return showing.find((leaf) => leaf === recent) ?? showing[0] ?? null;
 }
 
+/**
+ * `isDeferred` and `loadIfDeferred` exist from Obsidian 1.7.2. Before that no
+ * pane is ever deferred, so reading them off an untyped view is right for
+ * every version this plugin supports.
+ */
+interface MaybeDeferredLeaf {
+  isDeferred?: boolean;
+  loadIfDeferred?: () => Promise<void>;
+}
+
+function deferral(leaf: WorkspaceLeaf): MaybeDeferredLeaf {
+  return leaf;
+}
+
 function isPatchable(proto: unknown): proto is OutlineViewLike {
   const p = proto as Partial<OutlineViewLike> | null;
   return !!p && typeof p.getHeadings === 'function' && typeof p.findCorrespondingLeaf === 'function';
@@ -62,7 +78,7 @@ function isPatchable(proto: unknown): proto is OutlineViewLike {
 function loadedOutlines(app: App): OutlineViewLike[] {
   return app.workspace
     .getLeavesOfType(OUTLINE_VIEW_TYPE)
-    .filter((leaf) => !leaf.isDeferred)
+    .filter((leaf) => !deferral(leaf).isDeferred)
     .map((leaf) => leaf.view as unknown as OutlineViewLike);
 }
 
@@ -123,11 +139,11 @@ export function installOutlinePatch(app: App, source: OutlineSource): () => void
     if (!active || patched) return;
     for (const leaf of app.workspace.getLeavesOfType(OUTLINE_VIEW_TYPE)) {
       // Side panes restored from the last session load only when first shown.
-      if (leaf.isDeferred) {
+      if (deferral(leaf).isDeferred) {
         // Once per leaf: if loading it did not take, asking again would loop.
         if (!loading.has(leaf)) {
           loading.add(leaf);
-          void leaf.loadIfDeferred?.().then(attempt, () => undefined);
+          void deferral(leaf).loadIfDeferred?.().then(attempt, () => undefined);
         }
         continue;
       }

@@ -4,8 +4,8 @@ export interface Scheduler {
 }
 
 export const realScheduler: Scheduler = {
-  set: (fn, ms) => setTimeout(fn, ms),
-  clear: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+  set: (fn, ms) => window.setTimeout(fn, ms),
+  clear: (h) => window.clearTimeout(h as number),
 };
 
 export interface Debounced {

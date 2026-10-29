@@ -133,6 +133,18 @@ the page as you edit or change the filter. A selection in the preview becomes
 the query. With only the source showing, Ctrl/Cmd+F opens the editor's own
 search.
 
+## Hover preview
+
+Hold Ctrl/Cmd over a link in the preview that leads to another DITA file (an
+xref, a related link, an entry of a map's outline) and a popover shows that
+file, scrolled to the element the link names. It is Obsidian's own Page
+Preview popover: whether Ctrl/Cmd is needed is Settings > Page preview >
+DITA Viewer. The same preview serves a `.dita` or `.ditamap` anywhere Obsidian
+shows one, and `![[topic.dita]]` in a note embeds the topic (a map shows its
+outline). Obsidian keeps its embed registry out of the public API; if a future
+version removes it the plugin registers nothing and DITA links simply do not
+preview.
+
 ## Conditional processing
 
 Content marked with `audience`, `platform`, `product`, `otherprops`, `props`

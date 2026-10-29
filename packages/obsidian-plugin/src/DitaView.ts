@@ -1,7 +1,5 @@
-import { FileSystemAdapter, Keymap, Menu, Notice, TFile, TextFileView, ViewStateResult, WorkspaceLeaf, moment, normalizePath, setIcon } from 'obsidian';
+import { FileSystemAdapter, HoverParent, HoverPopover, Keymap, Menu, Notice, TFile, TextFileView, ViewStateResult, WorkspaceLeaf, moment, normalizePath, setIcon } from 'obsidian';
 import { dirname, isAbsolute, join, relative, resolve } from 'path';
-import coreCss from '@dita-viewer/core/styles/dita-content.css';
-import adapterCss from './theme/obsidian-adapter.css';
 import { collectDiagnostics, decodeHrefPart, getKeyDefs, isExcluded, profileGroups, profileValuesOfKeys, splitRefFragment } from '@dita-viewer/core';
 import type { Ditaval, ProfileFilter, ProfileGroup, SiteNavEntry } from '@dita-viewer/core';
 import { renderBookFile, renderDitaFile, renderDitamapFile, renderSiteFile } from './renderFile';
@@ -21,7 +19,9 @@ import { badgeBox, badgeHit, conrefKindOf } from './conrefJump';
 import { outlineEntryPosition } from './mapOutline';
 import { detectEol, toLf, withEol } from './lineEndings';
 import type { Eol } from './lineEndings';
+import { isExternalHref, resolveLinkTarget } from './linkTarget';
 import { refreshOutlines } from './outlinePatch';
+import { getSheets } from './previewSheets';
 import { PreviewFind } from './previewFind';
 import { StructureSpec, WrapSpec } from './snippetsData';
 import { insertStructure, wrapSelection } from './snippets';
@@ -35,34 +35,30 @@ import {
   normalizeProfileState,
   resolveDitavalPath,
 } from './profileState';
+import { setRenderedHtml } from './renderedHtml';
 import { ProfilePanel } from './profilePanel';
 import type { ProfilePanelHost } from './profilePanel';
 import { DitavalPicker } from './pickers';
 
 export const VIEW_TYPE_DITA = 'dita-viewer-topic';
 
-// One pair of stylesheets per window, shared by every preview in it.
-// Constructable sheets are parsed once and adopted by each shadow root; they
-// cannot cross documents, so a popout window gets its own pair.
-const sheetsByDocument = new WeakMap<Document, CSSStyleSheet[]>();
-function getSheets(doc: Document): CSSStyleSheet[] {
-  let sheets = sheetsByDocument.get(doc);
-  if (!sheets) {
-    const win = doc.defaultView ?? window;
-    sheets = [coreCss, adapterCss].map((css) => {
-      const s = new win.CSSStyleSheet();
-      s.replaceSync(css);
-      return s;
-    });
-    sheetsByDocument.set(doc, sheets);
-  }
-  return sheets;
+/** The id the preview's links hover under; Settings > Page preview lists it, and the plugin registers it. */
+export const HOVER_SOURCE = 'dita-viewer';
+
+/** Close a hover popover. `hide` is not in Obsidian's typings, so it is looked for; a popover without it just times out as usual. */
+function hidePopover(popover: HoverPopover | null): void {
+  (popover as unknown as { hide?: () => void } | null)?.hide?.();
 }
 
 /** After the preview is told to jump to a line, ignore the editor's own scroll echo for this long. */
 const SYNC_QUIET_MS = 250;
 
 /** The key a keyref/conkeyref names: everything before the first '/'. */
+/** Show or hide a header button with a class, not an inline style. */
+function setShown(el: HTMLElement, shown: boolean): void {
+  el.toggleClass('dita-hidden', !shown);
+}
+
 function keyNameOf(value: string): string {
   const slash = value.indexOf('/');
   return (slash < 0 ? value : value.slice(0, slash)).trim();
@@ -95,7 +91,7 @@ function fragmentOf(href: string): string {
  * step with what is on screen; Obsidian saves it, and reloads it when the
  * file changes on disk.
  */
-export class DitaView extends TextFileView {
+export class DitaView extends TextFileView implements HoverParent {
   private mode: ViewMode;
   private container!: HTMLElement;
   private errorEl!: HTMLElement;
@@ -144,6 +140,10 @@ export class DitaView extends TextFileView {
   private readonly editorEcho = new EchoGuard();
   private syncEditorFrame = 0;
   private find?: PreviewFind;
+  /** Obsidian's Page Preview keeps the popover it opens over one of this view's links here. */
+  hoverPopover: HoverPopover | null = null;
+  private hoverLink?: Element;
+  private hoverHideTimer = 0;
   private readonly idReader = createIdReader();
   /** A reveal requested through setEphemeralState, applied once the text is loaded. */
   private pendingReveal?: { line?: number; col?: number; id?: string };
@@ -219,6 +219,7 @@ export class DitaView extends TextFileView {
     conrefHint.id = 'dv-conref-jump-hint';
     this.shadow.addEventListener('click', (evt) => this.onClick(evt as MouseEvent));
     this.shadow.addEventListener('contextmenu', (evt) => this.onContextMenu(evt as MouseEvent));
+    this.shadow.addEventListener('mouseover', (evt) => this.onHoverMove(evt as MouseEvent));
     this.shadow.addEventListener('pointermove', (evt) => this.onConrefHover(evt as PointerEvent));
     this.host.addEventListener('pointerleave', () => this.host.classList.remove('dv-conref-hot'));
     // Focusable by click, so Ctrl/Cmd+A selects the topic rather than the whole app.
@@ -237,7 +238,7 @@ export class DitaView extends TextFileView {
     });
 
     this.backAction = this.addAction('arrow-left', 'Back to the previous view', () => this.goBack());
-    this.backAction.style.display = 'none';
+    setShown(this.backAction, false);
     this.sitePrevAction = this.addAction('chevron-left', 'Previous topic', () => this.stepSite(-1));
     this.sitePrevAction.addClass('dita-site-step');
     this.siteNextAction = this.addAction('chevron-right', 'Next topic', () => this.stepSite(1));
@@ -250,7 +251,7 @@ export class DitaView extends TextFileView {
       this.profileHost(),
       // The header button toggles the panel itself, and the DITAVAL picker is a
       // modal: clicking in either must not count as clicking away.
-      (target) => this.profileAction.contains(target) || (target instanceof Element && target.closest('.modal-container') !== null),
+      (target) => this.profileAction.contains(target) || (target.instanceOf(Element) && target.closest('.modal-container') !== null),
       () => this.updateProfileAction(),
     );
     this.reloadDitaval();
@@ -285,13 +286,20 @@ export class DitaView extends TextFileView {
     return this.completionEnv()?.keys();
   }
 
+  /** Run `cb` before the next paint of the window this view is in (a popout has its own frames). */
+  private nextFrame(cb: FrameRequestCallback): number {
+    return this.containerEl.win.requestAnimationFrame(cb);
+  }
+
   async onClose(): Promise<void> {
     this.scheduleRender.cancel();
     this.scheduleOutlineRefresh.cancel();
-    if (this.syncFrame) cancelAnimationFrame(this.syncFrame);
-    if (this.syncEditorFrame) cancelAnimationFrame(this.syncEditorFrame);
+    if (this.syncFrame) this.containerEl.win.cancelAnimationFrame(this.syncFrame);
+    if (this.syncEditorFrame) this.containerEl.win.cancelAnimationFrame(this.syncEditorFrame);
     this.find?.destroy();
     this.find = undefined;
+    window.clearTimeout(this.hoverHideTimer);
+    hidePopover(this.hoverPopover);
     this.profilePanel?.destroy();
     this.editor?.destroy();
   }
@@ -457,12 +465,12 @@ export class DitaView extends TextFileView {
     this.body?.classList.toggle('dita-body--site', this.mode === 'site');
     setIcon(this.modeAction, MODE_ICONS[this.mode]);
     this.modeAction.setAttribute('aria-label', MODE_LABELS[this.mode]);
-    this.sitePrevAction.style.display = this.mode === 'site' ? '' : 'none';
-    this.siteNextAction.style.display = this.mode === 'site' ? '' : 'none';
+    setShown(this.sitePrevAction, this.mode === 'site');
+    setShown(this.siteNextAction, this.mode === 'site');
     this.updateSiteNavActions();
     this.updateBackAction();
     // Conditional processing acts on the preview; with only the source showing there is nothing to filter.
-    this.profileAction.style.display = panes.preview ? '' : 'none';
+    setShown(this.profileAction, panes.preview);
     if (!panes.preview) {
       this.profilePanel?.close();
       this.find?.close();
@@ -471,7 +479,7 @@ export class DitaView extends TextFileView {
     if (panes.preview && this.previewStale && this.file) void this.render();
     if (panes.editor) {
       // CodeMirror cannot measure while hidden; once visible, measure and line up the preview.
-      requestAnimationFrame(() => {
+      this.nextFrame(() => {
         this.editor.remeasure();
         if (this.mode === 'split') this.syncPreviewToEditor();
       });
@@ -488,7 +496,7 @@ export class DitaView extends TextFileView {
     if (!this.backAction) return;
     const back = this.revealReturnMode;
     const show = back !== undefined && back !== this.mode;
-    this.backAction.style.display = show ? '' : 'none';
+    setShown(this.backAction, show);
     if (show) this.backAction.setAttribute('aria-label', `Back to ${MODE_LABELS[back]}`);
   }
 
@@ -572,7 +580,7 @@ export class DitaView extends TextFileView {
     const active = scroller.querySelector<HTMLElement>('.dita-site-link.is-active');
     if (active) {
       // Keep the current page's row visible without moving the page itself.
-      requestAnimationFrame(() => {
+      this.nextFrame(() => {
         if (!active.isConnected) return;
         const row = active.getBoundingClientRect();
         const box = scroller.getBoundingClientRect();
@@ -598,8 +606,8 @@ export class DitaView extends TextFileView {
   private updateSiteNavActions(): void {
     if (!this.sitePrevAction || !this.siteNextAction) return;
     const isSite = this.mode === 'site';
-    this.sitePrevAction.style.display = isSite ? '' : 'none';
-    this.siteNextAction.style.display = isSite ? '' : 'none';
+    setShown(this.sitePrevAction, isSite);
+    setShown(this.siteNextAction, isSite);
     if (!isSite) return;
 
     const index = this.sitePages.findIndex((page) => page.absPath === this.siteCurrent);
@@ -1004,7 +1012,7 @@ export class DitaView extends TextFileView {
       return;
     }
     this.showError(undefined);
-    this.body.innerHTML = result.html;
+    setRenderedHtml(this.body, result.html);
     this.body.classList.toggle('hide-profiling', !this.profile.highlight);
     this.applyProfileFilter();
     this.find?.refresh();
@@ -1016,7 +1024,7 @@ export class DitaView extends TextFileView {
     const anchor = this.sitePendingAnchor;
     this.sitePendingAnchor = undefined;
     if (anchor && this.mode === 'site') {
-      requestAnimationFrame(() => this.scrollToSiteAnchor(anchor));
+      this.nextFrame(() => this.scrollToSiteAnchor(anchor));
     }
   }
 
@@ -1046,7 +1054,7 @@ export class DitaView extends TextFileView {
   private queueSyncToPreview(): void {
     if (this.mode !== 'split' || this.syncFrame || performance.now() < this.quietUntil) return;
     if (this.editorEcho.isEcho(this.editor.view.scrollDOM.scrollTop)) return;
-    this.syncFrame = requestAnimationFrame(() => {
+    this.syncFrame = this.nextFrame(() => {
       this.syncFrame = 0;
       this.syncPreviewToEditor();
     });
@@ -1078,7 +1086,7 @@ export class DitaView extends TextFileView {
   private queueSyncToEditor(): void {
     if (this.mode !== 'split' || this.syncEditorFrame || performance.now() < this.quietUntil) return;
     if (this.previewEcho.isEcho(this.scroller.scrollTop)) return;
-    this.syncEditorFrame = requestAnimationFrame(() => {
+    this.syncEditorFrame = this.nextFrame(() => {
       this.syncEditorFrame = 0;
       this.syncEditorToPreview();
     });
@@ -1267,10 +1275,70 @@ export class DitaView extends TextFileView {
       return;
     }
     const nearest = target?.closest('[data-line]');
-    const lineEl = (nearest && section.contains(nearest) ? nearest : section.querySelector('[data-line]')) as Element | null;
+    const lineEl = nearest && section.contains(nearest) ? nearest : section.querySelector('[data-line]');
     const line = lineEl ? Number(lineEl.getAttribute('data-line')) : 0;
     const col = lineEl ? Number(lineEl.getAttribute('data-start-col') ?? 0) : 0;
     this.openSourceBeside(file, line, col);
+  }
+
+  // ── hover preview ──
+
+  /** The link under the pointer that leads to another DITA file, and the Obsidian link text for it. */
+  private hoverTargetAt(target: EventTarget | null): { el: Element; linktext: string } | undefined {
+    const vaultRoot = this.vaultRoot();
+    const el = target instanceof Element ? target : null;
+    if (!el || !vaultRoot || !this.file) return undefined;
+    const base = (a: Element): string | undefined => a.closest('[data-dita-book-file]')?.getAttribute('data-dita-book-file') ?? undefined;
+    // The first selector that matches the link names where it goes; a "#" placeholder href never does.
+    const link =
+      el.closest('a.map-tree-link[data-href]') ??
+      el.closest('[data-dita-book-xref]') ??
+      el.closest('a[data-dita-href]') ??
+      el.closest('a[href]');
+    if (!link) return undefined;
+    const href =
+      link.getAttribute('data-href') ?? link.getAttribute('data-dita-book-xref') ?? link.getAttribute('data-dita-href') ?? link.getAttribute('href') ?? '';
+    if (!href || isExternalHref(href) || href.startsWith('#')) return undefined;
+    const target_ = resolveLinkTarget(vaultRoot, this.file.path, href, base(link));
+    if (!target_) return undefined;
+    return { el: link, linktext: target_.fragment ? `${target_.path}#${target_.fragment}` : target_.path };
+  }
+
+  /**
+   * The pointer moved over the preview: over a link to another DITA file, ask
+   * Page Preview for its popover (it applies the "require Ctrl" setting).
+   *
+   * Page Preview only keeps a popover over an element in the page's own
+   * document, and a link in the preview is inside a shadow root; so the
+   * popover is anchored to the preview's host element, and what that cannot
+   * express (the pointer leaving the link for other text in the preview, or
+   * going from one link to the next) is done here.
+   */
+  private onHoverMove(evt: MouseEvent): void {
+    const link = this.hoverTargetAt(evt.target);
+    if (link?.el === this.hoverLink) return;
+    this.hoverLink = link?.el;
+    window.clearTimeout(this.hoverHideTimer);
+    if (!link || !this.file) {
+      this.hoverHideTimer = window.setTimeout(() => {
+        const popover = this.hoverPopover;
+        if (popover && !this.hoverLink && !popover.hoverEl.matches(':hover')) hidePopover(popover);
+      }, 300);
+      return;
+    }
+    // Another link: the popover for the last one goes, and so does a request
+    // still waiting for Ctrl (Page Preview drops those on the next mouseover
+    // that is not over its target, which for a shadow root is this host).
+    hidePopover(this.hoverPopover);
+    this.host.ownerDocument.body.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    this.app.workspace.trigger('hover-link', {
+      event: evt,
+      source: HOVER_SOURCE,
+      hoverParent: this,
+      targetEl: this.host,
+      linktext: link.linktext,
+      sourcePath: this.file.path,
+    });
   }
 
   private onClick(evt: MouseEvent): void {
@@ -1306,7 +1374,7 @@ export class DitaView extends TextFileView {
     if (linked && this.file) {
       evt.preventDefault();
       const target = linked.getAttribute('data-dita-href') ?? '';
-      if (/^(https?:|mailto:)/i.test(target)) window.open(target, '_blank');
+      if (isExternalHref(target)) window.open(target, '_blank');
       else if (target && !target.startsWith('#')) {
         const section = linked.closest('[data-dita-book-file]');
         this.openRelative(target, evt, section?.getAttribute('data-dita-book-file') ?? undefined);
@@ -1321,7 +1389,7 @@ export class DitaView extends TextFileView {
     const href = a.getAttribute('href') ?? '';
     evt.preventDefault();
 
-    if (/^(https?:|mailto:)/i.test(href)) {
+    if (isExternalHref(href)) {
       window.open(href, '_blank');
       return;
     }
@@ -1343,11 +1411,9 @@ export class DitaView extends TextFileView {
   private openRelative(href: string, evt?: MouseEvent, baseAbsPath?: string): void {
     const vaultRoot = this.vaultRoot();
     if (!vaultRoot || !this.file) return;
-    const [path] = href.split('#');
-    const baseDir = baseAbsPath ? dirname(baseAbsPath) : resolve(vaultRoot, dirname(this.file.path));
-    const rel = relative(vaultRoot, resolve(baseDir, decodeHrefPart(path)));
-    if (rel.startsWith('..') || isAbsolute(rel)) return;
-    const target = this.app.vault.getAbstractFileByPath(normalizePath(rel));
+    const link = resolveLinkTarget(vaultRoot, this.file.path, href, baseAbsPath);
+    if (!link) return;
+    const target = this.app.vault.getAbstractFileByPath(normalizePath(link.path));
     if (target instanceof TFile) {
       void this.app.workspace.getLeaf(evt ? Keymap.isModEvent(evt) : false).openFile(target);
     }
@@ -1513,7 +1579,7 @@ export class DitaView extends TextFileView {
     };
     // A pane that was hidden needs a frame to be laid out before it can scroll.
     if (visible) reveal();
-    else requestAnimationFrame(reveal);
+    else this.nextFrame(reveal);
   }
 
   /**

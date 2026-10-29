@@ -8,8 +8,10 @@ interface SettingsHost {
 }
 
 export class DitaSettingTab extends PluginSettingTab {
-  constructor(app: App, private readonly host: Plugin & SettingsHost) {
-    super(app, host);
+  // `plugin` and `host` are the same object. `Plugin` has its own `settings`
+  // (Obsidian 1.13+), so reads go through the narrower `SettingsHost`.
+  constructor(app: App, plugin: Plugin, private readonly host: SettingsHost) {
+    super(app, plugin);
   }
 
   display(): void {
