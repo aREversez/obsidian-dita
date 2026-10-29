@@ -1,16 +1,16 @@
 # Publish a release when a version tag is pushed.
 #
 #   npm version 0.2.0 -w obsidian-dita --no-git-tag-version
-#   git commit -am "chore: release 0.2.0" && git tag 0.2.0 && git push --follow-tags
+#   npm run release:prepare
+#   git commit -am "chore: release 0.2.0" && git tag 0.2.0 && git push && git push origin 0.2.0
 #
 # The tag is the bare version, with no leading "v": Obsidian and BRAT install
 # the release whose tag equals manifest.json's version.
 #
 # The job then builds, mirrors main.js/styles.css/manifest.json into the
-# repository root (where the community submission and the installer look),
-# commits that and re-points the tag at it, so the tagged tree carries the
-# flattened assets. Commits and tags pushed with GITHUB_TOKEN do not trigger
-# this workflow again, so there is no recursion.
+# repository root, and attaches those three files to the release under flat
+# names. It writes no git objects: the committed root copies come from
+# `npm run release:prepare`, and CI only checks that they track the build.
 #
 # @dita-viewer/core is not released from here: it is published from the VS Code
 # DITA Viewer repository (tag core-<version>), and this plugin pins a version.
@@ -46,33 +46,12 @@ jobs:
         run: node scripts/check-release.mjs "$GITHUB_REF_NAME"
 
       # Obsidian loads main.js, manifest.json and styles.css from the plugin
-      # folder; the submission wants them tracked at the repository root.
+      # folder; the submission wants them tracked at the repository root. This
+      # refreshes the working copy from the build, which is what gets attached
+      # below, and leaves the tagged tree untouched.
       - name: Sync the built assets into the repository root
         run: npm run sync:root
 
-      - name: Commit and re-point the tag at the synced files
-        # The tag move is pushed with GITHUB_TOKEN, which cannot trigger this
-        # workflow again; the guard covers runners where that may change.
-        if: github.actor != 'github-actions[bot]'
-        env:
-          VERSION: ${{ github.ref_name }}
-          BRANCH: ${{ github.event.repository.default_branch }}
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ -n "$(git status --porcelain)" ]; then
-            git add main.js styles.css manifest.json
-            git commit -m "chore: sync root plugin files for $VERSION"
-          fi
-          # On a tag event HEAD is detached, so the branch is named explicitly.
-          git push origin "HEAD:refs/heads/$BRANCH"
-          # Point the tag at the tagged-or-synced commit so the tag's tree
-          # always carries the root files the installer reads.
-          git tag -f "$VERSION"
-          git push -f origin "refs/tags/$VERSION"
-
-      # Re-run idempotent: an existing release is replaced, so the three
-      # assets always match the freshly synced tagged tree.
       - name: Publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

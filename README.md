@@ -273,19 +273,26 @@ sync:test` to copy the current bundle without rebuilding, or set
 
 The version lives in `manifest.json` (repository root), `versions.json` and
 the plugin's `package.json`; `npm run release:check` (part of `verify`) fails
-when they disagree.
+when they disagree. The built `main.js`, `styles.css` and `manifest.json` are
+committed at the repository root, where the Obsidian submission and its
+reviewers look for them.
 
 ```
 npm version 0.2.0 -w obsidian-dita --no-git-tag-version   # also updates manifest.json and versions.json
+npm run release:prepare                                   # build, then refresh the root copies
 git commit -am "chore: release 0.2.0"
-git tag 0.2.0 && git push --follow-tags
+git tag 0.2.0 && git push && git push origin 0.2.0
 ```
 
+`git push --follow-tags` skips lightweight tags, so the tag is pushed by name.
+
 Pushing the tag runs `.github/workflows/release.yml`: it runs `npm run verify`,
-checks that the tag equals the manifest version (bare `0.2.0`, no `v`), and
-publishes a GitHub release with `main.js`, `manifest.json` and `styles.css`
-attached. Raise `minAppVersion` in `manifest.json` before the bump if a release
-starts to need a newer Obsidian; `versions.json` records it per version.
+checks that the tag equals the manifest version (bare `0.2.0`, no `v`), rebuilds
+and syncs the root copies in the runner's own working tree, and publishes a
+GitHub release with `main.js`, `manifest.json` and `styles.css` attached at the
+flat root paths the installer downloads. The workflow writes nothing to git.
+Raise `minAppVersion` in `manifest.json` before the bump if a release starts to
+need a newer Obsidian; `versions.json` records it per version.
 
 ## Sample document
 

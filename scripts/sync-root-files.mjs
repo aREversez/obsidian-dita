@@ -3,8 +3,8 @@
 // reviewers expect main.js, styles.css and manifest.json to live next to each
 // other and to be committed to the tag being released.
 //
-//   npm run sync:root          # after `npm run build`
-//   node scripts/sync-root-files.mjs --check   # verify without writing (CI)
+//   npm run sync:root          # after `npm run build`, before committing a release
+//   npm run sync:root:check    # verify without writing (CI)
 //
 // manifest.json is bidirectional: the root copy is the source the build reads
 // (see esbuild.config.mjs), so here it is only compared, never overwritten.
@@ -20,6 +20,17 @@ const distDir = resolve(root, 'packages/obsidian-plugin/dist');
 // Files the build produces in dist that the submission needs at the root.
 const COPYABLE = ['main.js', 'styles.css', 'manifest.json'];
 
+// The bundle inlines .css text, so a CRLF working tree on Windows builds a
+// main.js whose embedded stylesheet carries \r\n, while the same source builds
+// byte-different on a Linux runner. Line endings are the only real difference,
+// so compare across them: what a reviewer reads at the root is the same plugin
+// the build produced.
+const sameIgnoringLineEndings = (a, b) => {
+  if (a.equals(b)) return true;
+  const strip = (buf) => buf.toString('binary').replace(/\r\n/g, '\n');
+  return strip(a) === strip(b);
+};
+
 /**
  * @returns {string[]} the copied file names; throws when the build output or
  *   the source manifest.json is missing.
@@ -32,10 +43,7 @@ export function syncRootFiles({ check = false, quiet = false } = {}) {
     if (!existsSync(from)) {
       throw new Error(`build output missing: ${from} (run \`npm run build\` first)`);
     }
-    const same =
-      existsSync(to) &&
-      readFileSync(from).equals(readFileSync(to));
-    if (!same) {
+    if (!existsSync(to) || !sameIgnoringLineEndings(readFileSync(from), readFileSync(to))) {
       drifted.push(name);
       if (!check) copyFileSync(from, to);
     }
