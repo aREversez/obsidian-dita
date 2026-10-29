@@ -119,6 +119,18 @@ methods of the Outline view. If a future Obsidian changes them, the plugin
 leaves the Outline alone and DITA files show "No headings found" there, as
 before; nothing else is affected.
 
+## Find in the preview
+
+Ctrl/Cmd+F in the preview (reading, split, site and book views) opens a find
+bar at the top right. Matches are highlighted, the current one in the accent
+colour; Enter and Shift+Enter (or the arrows) step through them, the `Aa`
+button matches case, Esc closes. A phrase is found across inline markup and
+line breaks, but not from one paragraph into the next, and text the
+conditional processing filter has hidden is not searched. The matches follow
+the page as you edit or change the filter. A selection in the preview becomes
+the query. With only the source showing, Ctrl/Cmd+F opens the editor's own
+search.
+
 ## Conditional processing
 
 Content marked with `audience`, `platform`, `product`, `otherprops`, `props`

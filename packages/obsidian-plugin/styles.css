@@ -323,3 +323,46 @@
 .dita-profile-button {
   flex: 0 0 auto;
 }
+
+/* ── Find in the preview ── */
+
+.dita-find {
+  display: none;
+  position: absolute;
+  top: var(--size-4-2, 8px);
+  right: var(--size-4-5, 20px);
+  z-index: var(--layer-popover, 30);
+  align-items: center;
+  gap: var(--size-2-1, 2px);
+  padding: var(--size-2-2, 4px) var(--size-2-3, 6px);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m, 8px);
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+}
+
+.dita-find.is-open {
+  display: flex;
+}
+
+.dita-find-input {
+  width: 180px;
+}
+
+.dita-find.has-no-results .dita-find-input {
+  border-color: var(--text-error);
+}
+
+.dita-find-count {
+  min-width: 3.5em;
+  padding: 0 var(--size-2-2, 4px);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* The conditional processing panel opens at the same corner; it makes room. */
+.dita-container.has-find .dita-profile-panel {
+  top: calc(var(--size-4-2, 8px) + 44px);
+}

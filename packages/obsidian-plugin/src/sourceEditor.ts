@@ -15,7 +15,7 @@ import { Decoration, EditorView, GutterMarker, ViewPlugin, ViewUpdate, drawSelec
 import { bracketMatching, HighlightStyle, indentUnit, syntaxHighlighting } from '@codemirror/language';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { CompletionSource, autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
-import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
+import { highlightSelectionMatches, openSearchPanel, searchKeymap } from '@codemirror/search';
 import { tags as t } from '@lezer/highlight';
 import { xml } from '@codemirror/lang-xml';
 import { minimalReplacement } from './textDiff';
@@ -54,6 +54,10 @@ export interface SourceEditor {
   /** Call after the editor's container goes from hidden to visible. */
   remeasure(): void;
   focus(): void;
+  /** Open the editor's find panel. */
+  openSearch(): void;
+  /** Open the editor's find panel. */
+  openSearch(): void;
   destroy(): void;
 }
 
@@ -391,6 +395,9 @@ export function createSourceEditor(parent: HTMLElement, opts: SourceEditorOption
 
     remeasure: () => view.requestMeasure(),
     focus: () => view.focus(),
+    openSearch: () => {
+      openSearchPanel(view);
+    },
     destroy: () => view.destroy(),
   };
 }

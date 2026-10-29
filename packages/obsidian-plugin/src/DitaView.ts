@@ -22,6 +22,7 @@ import { outlineEntryPosition } from './mapOutline';
 import { detectEol, toLf, withEol } from './lineEndings';
 import type { Eol } from './lineEndings';
 import { refreshOutlines } from './outlinePatch';
+import { PreviewFind } from './previewFind';
 import { StructureSpec, WrapSpec } from './snippetsData';
 import { insertStructure, wrapSelection } from './snippets';
 import {
@@ -142,6 +143,7 @@ export class DitaView extends TextFileView {
   private readonly previewEcho = new EchoGuard();
   private readonly editorEcho = new EchoGuard();
   private syncEditorFrame = 0;
+  private find?: PreviewFind;
   private readonly idReader = createIdReader();
   /** A reveal requested through setEphemeralState, applied once the text is loaded. */
   private pendingReveal?: { line?: number; col?: number; id?: string };
@@ -288,6 +290,8 @@ export class DitaView extends TextFileView {
     this.scheduleOutlineRefresh.cancel();
     if (this.syncFrame) cancelAnimationFrame(this.syncFrame);
     if (this.syncEditorFrame) cancelAnimationFrame(this.syncEditorFrame);
+    this.find?.destroy();
+    this.find = undefined;
     this.profilePanel?.destroy();
     this.editor?.destroy();
   }
@@ -459,7 +463,10 @@ export class DitaView extends TextFileView {
     this.updateBackAction();
     // Conditional processing acts on the preview; with only the source showing there is nothing to filter.
     this.profileAction.style.display = panes.preview ? '' : 'none';
-    if (!panes.preview) this.profilePanel?.close();
+    if (!panes.preview) {
+      this.profilePanel?.close();
+      this.find?.close();
+    }
     // Typing while only the source was showing left the preview behind.
     if (panes.preview && this.previewStale && this.file) void this.render();
     if (panes.editor) {
@@ -817,6 +824,7 @@ export class DitaView extends TextFileView {
   private onProfileChanged(): void {
     this.app.workspace.requestSaveLayout();
     this.applyProfileFilter();
+    this.find?.refresh();
     if (this.isMapFile() && (this.mode === 'site' || this.mode === 'book')) {
       this.previewStale = true;
       void this.render();
@@ -999,6 +1007,7 @@ export class DitaView extends TextFileView {
     this.body.innerHTML = result.html;
     this.body.classList.toggle('hide-profiling', !this.profile.highlight);
     this.applyProfileFilter();
+    this.find?.refresh();
     this.previewStale = false;
     this.updateScheme();
     this.setPreviewScroll(scrollTop);
@@ -1109,6 +1118,26 @@ export class DitaView extends TextFileView {
   private previewSelection(): Selection | null {
     const root = this.shadow as unknown as { getSelection?: () => Selection | null };
     return root.getSelection?.() ?? this.host.ownerDocument.getSelection();
+  }
+
+  /**
+   * Obsidian's Find command (Ctrl/Cmd+F) calls this on any view that has it.
+   * The preview gets a find bar of its own; with only the source showing the
+   * editor's own search opens instead.
+   */
+  showSearch(): void {
+    if (!panesFor(this.mode).preview) {
+      this.editor.openSearch();
+      return;
+    }
+    this.find ??= new PreviewFind({
+      shadow: this.shadow,
+      body: this.body,
+      barParent: this.container,
+      selectedText: () => this.previewSelection()?.toString() ?? '',
+      onClose: () => this.scroller.focus({ preventScroll: true }),
+    });
+    this.find.open();
   }
 
   private selectAllInPreview(): void {

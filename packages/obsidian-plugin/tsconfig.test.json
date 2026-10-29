@@ -37,6 +37,7 @@
     "src/profileLabels.ts",
     "src/outlineHeadings.ts",
     "src/outlinePatch.ts",
-    "src/lineEndings.ts"
+    "src/lineEndings.ts",
+    "src/textSearch.ts"
   ]
 }
