@@ -3,8 +3,8 @@
 // reviewers expect main.js, styles.css and manifest.json to live next to each
 // other and to be committed to the tag being released.
 //
-//   npm run sync:root          # after `npm run build`, before committing a release
-//   npm run sync:root:check    # verify without writing (CI)
+//   npm run sync:root          # build, then refresh the root copies (release:prepare)
+//   npm run sync:root:check    # report without writing (CI)
 //
 // manifest.json is bidirectional: the root copy is the source the build reads
 // (see esbuild.config.mjs), so here it is only compared, never overwritten.
@@ -20,47 +20,68 @@ const distDir = resolve(root, 'packages/obsidian-plugin/dist');
 // Files the build produces in dist that the submission needs at the root.
 const COPYABLE = ['main.js', 'styles.css', 'manifest.json'];
 
-// The bundle inlines .css text, so a CRLF working tree on Windows builds a
-// main.js whose embedded stylesheet carries \r\n, while the same source builds
-// byte-different on a Linux runner. Line endings are the only real difference,
-// so compare across them: what a reviewer reads at the root is the same plugin
-// the build produced.
-const sameIgnoringLineEndings = (a, b) => {
-  if (a.equals(b)) return true;
-  const strip = (buf) => buf.toString('binary').replace(/\r\n/g, '\n');
-  return strip(a) === strip(b);
-};
+// esbuild's output is not byte-reproducible across operating systems: the same
+// source builds a few hundred bytes apart on Linux and Windows. The committed
+// root copy is therefore only reported when it differs from the local build,
+// never failed on it. manifest.json is different in kind: it is hand-maintained
+// and is the version the installer reads, so it has to agree exactly.
 
 /**
- * @returns {string[]} the copied file names; throws when the build output or
- *   the source manifest.json is missing.
+ * @param {{ check?: boolean, quiet?: boolean }} [options] `check` writes
+ *   nothing and throws on what a reviewer would find wrong.
+ * @returns {{ changed: string[], missing: string[] }} `changed` are the files
+ *   that differ from the build (written unless `check`); `missing` the ones
+ *   absent at the root.
  */
 export function syncRootFiles({ check = false, quiet = false } = {}) {
-  const drifted = [];
+  const changed = [];
+  const missing = [];
+
   for (const name of COPYABLE) {
     const from = resolve(distDir, name);
     const to = resolve(root, name);
     if (!existsSync(from)) {
       throw new Error(`build output missing: ${from} (run \`npm run build\` first)`);
     }
-    if (!existsSync(to) || !sameIgnoringLineEndings(readFileSync(from), readFileSync(to))) {
-      drifted.push(name);
+
+    if (!existsSync(to)) {
+      missing.push(name);
       if (!check) copyFileSync(from, to);
+      continue;
     }
+
+    const built = readFileSync(from);
+    const committed = readFileSync(to);
+    if (built.equals(committed)) continue;
+
+    changed.push(name);
+    if (!check) copyFileSync(from, to);
   }
-  if (check && drifted.length > 0) {
-    throw new Error(
-      `root files are out of sync with the build: ${drifted.join(', ')} (run \`npm run sync:root\` and commit)`,
-    );
+
+  if (check) {
+    if (missing.length > 0) {
+      throw new Error(`the submission needs ${missing.join(', ')} committed at the repository root.`);
+    }
+    if (changed.includes('manifest.json')) {
+      throw new Error(
+        'manifest.json at the repository root is not the manifest this build used (run `npm run release:prepare` and commit).',
+      );
+    }
+    if (!quiet) {
+      console.log(
+        changed.length > 0
+          ? `sync-root-files: ${changed.join(', ')} differ from this machine's build; the release workflow ships its own.`
+          : 'sync-root-files: root main.js, styles.css and manifest.json match the build.',
+      );
+    }
+    return { changed, missing };
   }
+
   if (!quiet) {
-    console.log(
-      check
-        ? 'sync-root-files: root main.js, styles.css and manifest.json match the build.'
-        : `sync-root-files: ${drifted.length > 0 ? `updated ${drifted.join(', ')}` : 'already in sync'}.`,
-    );
+    const written = [...changed, ...missing];
+    console.log(`sync-root-files: ${written.length > 0 ? `wrote ${written.join(', ')}` : 'already in sync'}.`);
   }
-  return drifted;
+  return { changed, missing };
 }
 
 // `node scripts/sync-root-files.mjs [--check]` (npm run sync:root)

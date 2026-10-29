@@ -1,7 +1,8 @@
-# Normalize line endings so the bundle is byte-identical on every OS: the
-# build inlines .css and .ts file contents (esbuild text loader), so CRLF in
-# the working tree leaks CRLF into dist/main.js. That made the committed root
-# main.js and a CI build disagree byte for byte.
+# Keep the repository LF: the working tree was switching between CRLF and LF
+# per file and per machine, which made diffs and the copies of .css that the
+# bundle inline noisy. This does not make the build byte-reproducible across
+# operating systems (esbuild output still differs a little), and nothing gates
+# on that.
 * text=auto eol=lf
 *.svg text eol=lf
 *.png binary

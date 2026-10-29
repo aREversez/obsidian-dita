@@ -290,9 +290,10 @@ Pushing the tag runs `.github/workflows/release.yml`: it runs `npm run verify`,
 checks that the tag equals the manifest version (bare `0.2.0`, no `v`), rebuilds
 and syncs the root copies in the runner's own working tree, and publishes a
 GitHub release with `main.js`, `manifest.json` and `styles.css` attached at the
-flat root paths the installer downloads. The workflow writes nothing to git.
-Raise `minAppVersion` in `manifest.json` before the bump if a release starts to
-need a newer Obsidian; `versions.json` records it per version.
+flat root paths the installer downloads, so the attached bundle is the one that
+runner built. The workflow writes nothing to git. Raise `minAppVersion` in
+`manifest.json` before the bump if a release starts to need a newer Obsidian;
+`versions.json` records it per version.
 
 ## Sample document
 

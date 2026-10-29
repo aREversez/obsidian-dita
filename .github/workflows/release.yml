@@ -8,9 +8,11 @@
 # the release whose tag equals manifest.json's version.
 #
 # The job then builds, mirrors main.js/styles.css/manifest.json into the
-# repository root, and attaches those three files to the release under flat
-# names. It writes no git objects: the committed root copies come from
-# `npm run release:prepare`, and CI only checks that they track the build.
+# repository root of its own working tree, and attaches those three files to
+# the release under flat names, so what ships is what this runner built. It
+# writes no git objects: the committed root copies come from
+# `npm run release:prepare`, and CI checks that they are present and that
+# manifest.json is the one the bundle was made from.
 #
 # @dita-viewer/core is not released from here: it is published from the VS Code
 # DITA Viewer repository (tag core-<version>), and this plugin pins a version.
@@ -47,8 +49,8 @@ jobs:
 
       # Obsidian loads main.js, manifest.json and styles.css from the plugin
       # folder; the submission wants them tracked at the repository root. This
-      # refreshes the working copy from the build, which is what gets attached
-      # below, and leaves the tagged tree untouched.
+      # refreshes the working copy from the build on this runner, which is what
+      # gets attached below, and leaves the tagged tree untouched.
       - name: Sync the built assets into the repository root
         run: npm run sync:root
 
@@ -58,6 +60,8 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: |
           gh release delete "$VERSION" --yes 2>/dev/null || true
+          # No --target: the tag names the commit, and GitHub rejects a tag
+          # passed as target_commitish.
           gh release create "$VERSION" \
-            --target "$VERSION" --title "$VERSION" --notes "$VERSION" \
+            --title "$VERSION" --notes "$VERSION" \
             main.js manifest.json styles.css

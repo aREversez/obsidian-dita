@@ -1,9 +1,11 @@
 // Run by `npm version` in the plugin package (its "version" script): copy the
-// version npm just wrote to package.json into manifest.json and versions.json.
+// version npm just wrote to package.json into the root manifest.json and
+// versions.json, the two files the community plugin directory reads.
 //
 //   npm version 0.2.0 -w obsidian-dita --no-git-tag-version
+//   npm run release:prepare   # build, then refresh the root main.js and styles.css
 //
-// then commit and tag `0.2.0`; the release workflow does the rest.
+// then commit, tag and push both; the release workflow publishes from there.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
