@@ -64,6 +64,62 @@ export function previewOffsetForLine(anchors: readonly Anchor[], line: number): 
   return from.top + t * (to.top - from.top);
 }
 
+/**
+ * The source line (fractional: 12.5 is halfway down line 12) at the top of the
+ * preview when it is scrolled to `offset`. The inverse of previewOffsetForLine,
+ * so a position that is carried to the other pane and back lands where it
+ * started. Returns undefined when there are no anchors.
+ */
+export function lineForPreviewOffset(anchors: readonly Anchor[], offset: number): number | undefined {
+  const a = normalizeAnchors(anchors);
+  if (a.length === 0) return undefined;
+  if (offset <= a[0].top) {
+    return a[0].top <= 0 ? a[0].line : a[0].line * Math.max(0, offset / a[0].top);
+  }
+  const last = a[a.length - 1];
+  if (offset >= last.top) return last.line;
+  // Binary search for the last anchor with anchor.top <= offset.
+  let lo = 0;
+  let hi = a.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (a[mid].top <= offset) lo = mid;
+    else hi = mid - 1;
+  }
+  const from = a[lo];
+  const to = a[lo + 1];
+  // `from` is the last anchor at or above the offset, so `to` is strictly
+  // below it and the division is safe, even where earlier anchors share a height.
+  return from.line + ((offset - from.top) / (to.top - from.top)) * (to.line - from.line);
+}
+
+/**
+ * Tells our own scroll apart from the user's. Moving one pane to follow the
+ * other makes that pane fire a scroll event; if that event moved the first one
+ * back, the two would chase each other. So before a pane is moved by code, the
+ * position it ends at is noted, and a scroll event that arrives there soon
+ * after is the echo and is ignored.
+ */
+export class EchoGuard {
+  private expected: number | undefined;
+  private at = 0;
+
+  /** The pane was just moved by code and now sits at `position`. */
+  expect(position: number, now = performance.now()): void {
+    this.expected = position;
+    this.at = now;
+  }
+
+  /** Is a scroll event at `position` the echo of our own move? */
+  isEcho(position: number, now = performance.now()): boolean {
+    return this.expected !== undefined && now - this.at < EchoGuard.WINDOW_MS && Math.abs(position - this.expected) <= EchoGuard.TOLERANCE_PX;
+  }
+
+  /** Scroll positions are rounded to device pixels, so an echo can differ a little. */
+  private static readonly TOLERANCE_PX = 1.5;
+  private static readonly WINDOW_MS = 500;
+}
+
 /** True when `offset` lies inside the visible band, with `margin` px kept clear at the bottom. */
 export function isOffsetVisible(offset: number, scrollTop: number, viewportHeight: number, margin = 0): boolean {
   return offset >= scrollTop && offset <= scrollTop + viewportHeight - margin;

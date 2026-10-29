@@ -45,6 +45,8 @@ export interface SourceEditor {
   load(text: string, resetHistory: boolean): void;
   /** Source position at the top of the viewport: 0-based line plus the fraction of it scrolled past. */
   topLine(): number;
+  /** Scroll so `line` (0-based, may be fractional, as topLine returns) is at the top of the viewport. The caret stays. */
+  scrollToTopLine(line: number): void;
   /** Move the caret to a 0-based line/column and bring it into view. */
   reveal(line: number, col: number): void;
   /** Re-check the source now (a file the check reads changed on disk). */
@@ -362,6 +364,14 @@ export function createSourceEditor(parent: HTMLElement, opts: SourceEditorOption
       const line = view.state.doc.lineAt(block.from).number - 1;
       const frac = block.height > 0 ? Math.min(1, Math.max(0, (height - block.top) / block.height)) : 0;
       return line + frac;
+    },
+
+    scrollToTopLine(line) {
+      const doc = view.state.doc;
+      const whole = Math.min(doc.lines - 1, Math.max(0, Math.floor(line)));
+      const block = view.lineBlockAt(doc.line(whole + 1).from);
+      const frac = Math.min(1, Math.max(0, line - whole));
+      view.scrollDOM.scrollTop = block.top + frac * block.height + view.documentPadding.top;
     },
 
     reveal(line, col) {

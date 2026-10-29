@@ -1,5 +1,5 @@
 import { strict as assert } from 'assert';
-import { isOffsetVisible, normalizeAnchors, previewOffsetForLine } from '../src/syncLines';
+import { EchoGuard, isOffsetVisible, lineForPreviewOffset, normalizeAnchors, previewOffsetForLine } from '../src/syncLines';
 
 const A = [
   { line: 2, top: 100 },
@@ -71,5 +71,53 @@ describe('isOffsetVisible', () => {
     assert.equal(isOffsetVisible(99, 100, 400), false);
     assert.equal(isOffsetVisible(500, 100, 400), true);
     assert.equal(isOffsetVisible(500, 100, 400, 50), false);
+  });
+});
+
+describe('lineForPreviewOffset', () => {
+  it('returns undefined without anchors', () => {
+    assert.equal(lineForPreviewOffset([], 50), undefined);
+  });
+
+  it('interpolates between the anchors around the offset', () => {
+    assert.equal(lineForPreviewOffset(A, 200), 4); // halfway from line 2 (100) to line 6 (300)
+    assert.equal(lineForPreviewOffset(A, 320), 8);
+  });
+
+  it('is the inverse of previewOffsetForLine', () => {
+    for (const line of [0.5, 1, 2, 3.25, 6, 7.5, 9.9]) {
+      const offset = previewOffsetForLine(A, line) as number;
+      assert.ok(Math.abs((lineForPreviewOffset(A, offset) as number) - line) < 1e-9, `line ${line}`);
+    }
+  });
+
+  it('clamps above the first anchor in proportion, and below the last to it', () => {
+    assert.equal(lineForPreviewOffset(A, 50), 1); // half of the way to line 2
+    assert.equal(lineForPreviewOffset(A, 0), 0);
+    assert.equal(lineForPreviewOffset(A, 5000), 10);
+  });
+
+  it('copes with anchors that share a height (an empty element)', () => {
+    const same = [{ line: 1, top: 10 }, { line: 4, top: 100 }, { line: 5, top: 100 }, { line: 9, top: 200 }];
+    assert.equal(lineForPreviewOffset(same, 100), 5); // the later of the two, which is the visible one
+    assert.equal(lineForPreviewOffset(same, 150), 7);
+    assert.equal(lineForPreviewOffset(same, 55), 2.5);
+  });
+});
+
+describe('EchoGuard', () => {
+  it('knows the scroll event that follows its own move, and only that', () => {
+    const guard = new EchoGuard();
+    assert.equal(guard.isEcho(120, 0), false); // nothing expected yet
+    guard.expect(120, 0);
+    assert.equal(guard.isEcho(120, 16), true);
+    assert.equal(guard.isEcho(121, 16), true); // rounding to device pixels
+    assert.equal(guard.isEcho(160, 16), false); // the user scrolled somewhere else
+  });
+
+  it('stops treating a position as an echo after a while', () => {
+    const guard = new EchoGuard();
+    guard.expect(120, 0);
+    assert.equal(guard.isEcho(120, 600), false);
   });
 });

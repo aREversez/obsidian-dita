@@ -12,7 +12,7 @@ import { MODE_ICONS, MODE_LABELS, ViewMode, modesFor, panesFor, parseViewMode, p
 import { SourceEditor, createSourceEditor } from './sourceEditor';
 import { createCompletionEnv } from './completionEnv';
 import { ditaCompletionSource } from './completionSource';
-import { Anchor, isOffsetVisible, previewOffsetForLine } from './syncLines';
+import { EchoGuard, lineForPreviewOffset, Anchor, isOffsetVisible, previewOffsetForLine } from './syncLines';
 import { Debounced, debounce } from './debounce';
 import { ProblemRange, problemRanges } from './sourceDiagnostics';
 import { SourceReference, positionOfId } from './references';
@@ -138,6 +138,10 @@ export class DitaView extends TextFileView {
   private readonly scheduleOutlineRefresh: Debounced;
   private syncFrame = 0;
   private quietUntil = 0;
+  /** Our own scroll moves of the preview and of the editor, so their echoes are not taken for the user's. */
+  private readonly previewEcho = new EchoGuard();
+  private readonly editorEcho = new EchoGuard();
+  private syncEditorFrame = 0;
   private readonly idReader = createIdReader();
   /** A reveal requested through setEphemeralState, applied once the text is loaded. */
   private pendingReveal?: { line?: number; col?: number; id?: string };
@@ -218,6 +222,7 @@ export class DitaView extends TextFileView {
     // Focusable by click, so Ctrl/Cmd+A selects the topic rather than the whole app.
     this.scroller.tabIndex = -1;
     this.scroller.addEventListener('keydown', (evt) => this.onPreviewKey(evt));
+    this.scroller.addEventListener('scroll', () => this.queueSyncToEditor(), { passive: true });
 
     this.editor = createSourceEditor(this.editorEl, {
       text: this.data ?? '',
@@ -282,6 +287,7 @@ export class DitaView extends TextFileView {
     this.scheduleRender.cancel();
     this.scheduleOutlineRefresh.cancel();
     if (this.syncFrame) cancelAnimationFrame(this.syncFrame);
+    if (this.syncEditorFrame) cancelAnimationFrame(this.syncEditorFrame);
     this.profilePanel?.destroy();
     this.editor?.destroy();
   }
@@ -361,7 +367,7 @@ export class DitaView extends TextFileView {
     // when the source is unchanged.
     if (previewKindFor(mode) !== previewKindFor(this.mode)) {
       this.previewStale = true;
-      if (mode === 'site') this.scroller.scrollTop = 0;
+      if (mode === 'site') this.setPreviewScroll(0);
     }
     // Any deliberate mode change ends the "Back to ..." offer; showSource
     // records a new one after switching to split.
@@ -614,12 +620,12 @@ export class DitaView extends TextFileView {
     if (this.mode !== 'site' || !absPath) return;
     if (absPath === this.siteCurrent) {
       if (anchor) this.scrollToSiteAnchor(anchor);
-      else this.scroller.scrollTop = 0;
+      else this.setPreviewScroll(0);
       return;
     }
     this.siteCurrent = absPath;
     this.sitePendingAnchor = anchor;
-    this.scroller.scrollTop = 0;
+    this.setPreviewScroll(0);
     this.previewStale = true;
     if (panesFor(this.mode).preview) void this.render();
   }
@@ -995,7 +1001,7 @@ export class DitaView extends TextFileView {
     this.applyProfileFilter();
     this.previewStale = false;
     this.updateScheme();
-    this.scroller.scrollTop = scrollTop;
+    this.setPreviewScroll(scrollTop);
     // A cross-page site xref asks for an element on the page that just
     // arrived; the page has to be laid out before it can be scrolled to.
     const anchor = this.sitePendingAnchor;
@@ -1030,6 +1036,7 @@ export class DitaView extends TextFileView {
 
   private queueSyncToPreview(): void {
     if (this.mode !== 'split' || this.syncFrame || performance.now() < this.quietUntil) return;
+    if (this.editorEcho.isEcho(this.editor.view.scrollDOM.scrollTop)) return;
     this.syncFrame = requestAnimationFrame(() => {
       this.syncFrame = 0;
       this.syncPreviewToEditor();
@@ -1041,15 +1048,48 @@ export class DitaView extends TextFileView {
     const sc = this.editor.view.scrollDOM;
     // The ends line up exactly, whatever the two documents' proportions.
     if (sc.scrollTop <= 0) {
-      this.scroller.scrollTop = 0;
+      this.setPreviewScroll(0);
       return;
     }
     if (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 1) {
-      this.scroller.scrollTop = this.scroller.scrollHeight;
+      this.setPreviewScroll(this.scroller.scrollHeight);
       return;
     }
     const offset = previewOffsetForLine(this.measureAnchors(), this.editor.topLine());
-    if (offset !== undefined) this.scroller.scrollTop = offset;
+    if (offset !== undefined) this.setPreviewScroll(offset);
+  }
+
+  /** Move the preview by code, noting where it ends up so its scroll event is known for an echo. */
+  private setPreviewScroll(top: number): void {
+    this.scroller.scrollTop = top;
+    this.previewEcho.expect(this.scroller.scrollTop);
+  }
+
+  /** The preview was scrolled (by the user): bring the editor to the same place. */
+  private queueSyncToEditor(): void {
+    if (this.mode !== 'split' || this.syncEditorFrame || performance.now() < this.quietUntil) return;
+    if (this.previewEcho.isEcho(this.scroller.scrollTop)) return;
+    this.syncEditorFrame = requestAnimationFrame(() => {
+      this.syncEditorFrame = 0;
+      this.syncEditorToPreview();
+    });
+  }
+
+  private syncEditorToPreview(): void {
+    if (this.mode !== 'split') return;
+    const sc = this.scroller;
+    const ed = this.editor.view.scrollDOM;
+    if (sc.scrollTop <= 0) {
+      ed.scrollTop = 0;
+    } else if (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 1) {
+      // The ends line up exactly, as they do when the editor leads.
+      ed.scrollTop = ed.scrollHeight;
+    } else {
+      const line = lineForPreviewOffset(this.measureAnchors(), sc.scrollTop);
+      if (line === undefined) return;
+      this.editor.scrollToTopLine(line);
+    }
+    this.editorEcho.expect(ed.scrollTop);
   }
 
   /** The caret moved: bring its line into the preview if it is out of sight. */
@@ -1059,7 +1099,7 @@ export class DitaView extends TextFileView {
     if (offset === undefined) return;
     const h = this.scroller.clientHeight;
     if (!isOffsetVisible(offset, this.scroller.scrollTop, h, h * 0.2)) {
-      this.scroller.scrollTop = Math.max(0, offset - h * 0.3);
+      this.setPreviewScroll(Math.max(0, offset - h * 0.3));
     }
   }
 
@@ -1326,7 +1366,7 @@ export class DitaView extends TextFileView {
       return;
     }
     if (id) this.scrollToSiteAnchor(id);
-    else this.scroller.scrollTop = 0;
+    else this.setPreviewScroll(0);
   }
 
   /** Side by side, clicking the preview puts the caret at that element's source. */
@@ -1464,7 +1504,7 @@ export class DitaView extends TextFileView {
       this.showSource(line, 0);
       return;
     }
-    this.scroller.scrollTop = Math.max(0, offset);
+    this.setPreviewScroll(Math.max(0, offset));
   }
 
   /** Apply a reveal that arrived with the file (setEphemeralState) once its text is here. */
