@@ -1,8 +1,7 @@
 # Typecheck, test and build on every push and pull request to main or dev, so a
 # change is checked before a release tag is. The release workflow runs the same
-# `npm run verify` again on the tagged commit; here `sync:root:check` only asks
-# that the three submission files are committed at the root and that
-# manifest.json is the one the bundle was made from.
+# `npm run verify` again on the tagged commit; here `sync:root:check` asks that
+# the three submission files are committed at the root and track the build.
 
 name: CI
 
@@ -43,7 +42,7 @@ jobs:
       - run: npm run verify
 
       # main.js, styles.css and manifest.json must be committed at the
-      # repository root, the way the Obsidian submission reads them. Their
-      # bytes are not compared against the build: esbuild output differs
-      # slightly between operating systems.
+      # repository root, the way the Obsidian submission reads them, and match
+      # a fresh build. .gitattributes keeps every checkout LF so the bundle
+      # compares equal across operating systems.
       - run: npm run sync:root:check

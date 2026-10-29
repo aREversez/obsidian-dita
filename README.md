@@ -285,6 +285,9 @@ git tag 0.2.0 && git push && git push origin 0.2.0
 ```
 
 `git push --follow-tags` skips lightweight tags, so the tag is pushed by name.
+The build inlines the stylesheets, so a CRLF checkout produces a `main.js` that
+differs from a CI build; `.gitattributes` keeps every checkout LF and
+`sync:root:check` in CI fails a branch whose root copies drifted from the build.
 
 Pushing the tag runs `.github/workflows/release.yml`: it runs `npm run verify`,
 checks that the tag equals the manifest version (bare `0.2.0`, no `v`), rebuilds

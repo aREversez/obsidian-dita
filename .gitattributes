@@ -1,8 +1,7 @@
-# Keep the repository LF: the working tree was switching between CRLF and LF
-# per file and per machine, which made diffs and the copies of .css that the
-# bundle inline noisy. This does not make the build byte-reproducible across
-# operating systems (esbuild output still differs a little), and nothing gates
-# on that.
+# Keep every checkout LF. The build inlines the .css sources, so a CRLF
+# working tree produces a main.js a few hundred bytes larger than the same
+# source on a Linux runner, and the root copy CI compares against stopped
+# matching the build.
 * text=auto eol=lf
 *.svg text eol=lf
 *.png binary

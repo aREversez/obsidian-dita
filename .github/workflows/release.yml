@@ -11,8 +11,8 @@
 # repository root of its own working tree, and attaches those three files to
 # the release under flat names, so what ships is what this runner built. It
 # writes no git objects: the committed root copies come from
-# `npm run release:prepare`, and CI checks that they are present and that
-# manifest.json is the one the bundle was made from.
+# `npm run release:prepare`, and the CI workflow fails a branch whose copies
+# drifted from the build.
 #
 # @dita-viewer/core is not released from here: it is published from the VS Code
 # DITA Viewer repository (tag core-<version>), and this plugin pins a version.

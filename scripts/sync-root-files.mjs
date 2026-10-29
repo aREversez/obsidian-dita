@@ -20,21 +20,26 @@ const distDir = resolve(root, 'packages/obsidian-plugin/dist');
 // Files the build produces in dist that the submission needs at the root.
 const COPYABLE = ['main.js', 'styles.css', 'manifest.json'];
 
-// esbuild's output is not byte-reproducible across operating systems: the same
-// source builds a few hundred bytes apart on Linux and Windows. The committed
-// root copy is therefore only reported when it differs from the local build,
-// never failed on it. manifest.json is different in kind: it is hand-maintained
-// and is the version the installer reads, so it has to agree exactly.
+const CR = String.fromCharCode(13);
+const LF = String.fromCharCode(10);
+
+// The bundle inlines the .css sources, so a CRLF working tree builds a main.js
+// a few hundred bytes larger than the same source checked out with LF, which
+// is what .gitattributes enforces everywhere. A checkout that ignores that is
+// still the same plugin, so a line-ending-only difference is reported instead
+// of failing the run.
+const toLF = (buffer) => buffer.toString('binary').split(CR + LF).join(LF);
 
 /**
  * @param {{ check?: boolean, quiet?: boolean }} [options] `check` writes
- *   nothing and throws on what a reviewer would find wrong.
- * @returns {{ changed: string[], missing: string[] }} `changed` are the files
- *   that differ from the build (written unless `check`); `missing` the ones
- *   absent at the root.
+ *   nothing and throws on what a release would ship wrong.
+ * @returns {{ changed: string[], lineEndingOnly: string[], missing: string[] }}
+ *   what a plain run would rewrite, split by whether the difference is real
+ *   content or only line endings.
  */
 export function syncRootFiles({ check = false, quiet = false } = {}) {
   const changed = [];
+  const lineEndingOnly = [];
   const missing = [];
 
   for (const name of COPYABLE) {
@@ -54,7 +59,13 @@ export function syncRootFiles({ check = false, quiet = false } = {}) {
     const committed = readFileSync(to);
     if (built.equals(committed)) continue;
 
-    changed.push(name);
+    if (name !== 'manifest.json' && toLF(built) === toLF(committed)) {
+      lineEndingOnly.push(name);
+    } else {
+      // manifest.json is hand-maintained and carries the version the installer
+      // reads, so any difference means the root is not the release the build made.
+      changed.push(name);
+    }
     if (!check) copyFileSync(from, to);
   }
 
@@ -62,26 +73,26 @@ export function syncRootFiles({ check = false, quiet = false } = {}) {
     if (missing.length > 0) {
       throw new Error(`the submission needs ${missing.join(', ')} committed at the repository root.`);
     }
-    if (changed.includes('manifest.json')) {
+    if (changed.length > 0) {
       throw new Error(
-        'manifest.json at the repository root is not the manifest this build used (run `npm run release:prepare` and commit).',
+        `root ${changed.join(', ')} is not what this build produces (run \`npm run release:prepare\` and commit).`,
       );
     }
     if (!quiet) {
       console.log(
-        changed.length > 0
-          ? `sync-root-files: ${changed.join(', ')} differ from this machine's build; the release workflow ships its own.`
+        lineEndingOnly.length > 0
+          ? `sync-root-files: ${lineEndingOnly.join(', ')} match the build apart from line endings.`
           : 'sync-root-files: root main.js, styles.css and manifest.json match the build.',
       );
     }
-    return { changed, missing };
+    return { changed, lineEndingOnly, missing };
   }
 
   if (!quiet) {
-    const written = [...changed, ...missing];
+    const written = [...changed, ...lineEndingOnly, ...missing];
     console.log(`sync-root-files: ${written.length > 0 ? `wrote ${written.join(', ')}` : 'already in sync'}.`);
   }
-  return { changed, missing };
+  return { changed, lineEndingOnly, missing };
 }
 
 // `node scripts/sync-root-files.mjs [--check]` (npm run sync:root)
