@@ -1,4 +1,4 @@
-# obsidian-dita
+# DITA Viewer
 
 Read and edit DITA topics and maps in Obsidian. `.dita` files open in a
 formatted reading view and `.ditamap` files in an outline tree, as a small

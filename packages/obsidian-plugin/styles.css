@@ -379,7 +379,8 @@
   color: var(--text-error);
 }
 
-/* A header button that does not apply to the current mode. */
-.view-action.dita-hidden {
-  display: none !important;
+/* A header button that does not apply to the current mode. The extra class
+   outranks Obsidian's own display rule for header buttons. */
+.view-actions .view-action.dita-hidden {
+  display: none;
 }

@@ -1,6 +1,8 @@
 import { App, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import type { SettingDefinitionItem } from 'obsidian';
 import { DitaSettings, PREVIEW_DELAY_RANGE } from './settings';
-import { MODE_LABELS, TOPIC_MODES, parseViewMode } from './viewMode';
+import { PREVIEW_DELAY_STEP, SETTING_TEXT, applyControlValue, readControlValue, settingDefinitions } from './settingsControls';
+import { MODE_LABELS, TOPIC_MODES } from './viewMode';
 
 interface SettingsHost {
   settings: DitaSettings;
@@ -14,33 +16,41 @@ export class DitaSettingTab extends PluginSettingTab {
     super(app, plugin);
   }
 
+  // Obsidian 1.13+ builds the tab from these, and searches them.
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    return settingDefinitions();
+  }
+
+  getControlValue(key: string): unknown {
+    return readControlValue(this.host.settings, key);
+  }
+
+  async setControlValue(key: string, value: unknown): Promise<void> {
+    if (applyControlValue(this.host.settings, key, value)) await this.host.saveSettings();
+  }
+
+  // Before 1.13 there is no declarative API: the tab is drawn here.
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
 
     new Setting(containerEl)
-      .setName('Default view mode')
-      .setDesc('How a DITA file opens the first time. Each pane then remembers the mode you last chose for it.')
+      .setName(SETTING_TEXT.defaultMode.name)
+      .setDesc(SETTING_TEXT.defaultMode.desc)
       .addDropdown((dd) => {
         for (const m of TOPIC_MODES) dd.addOption(m, MODE_LABELS[m]);
-        dd.setValue(this.host.settings.defaultMode).onChange(async (value) => {
-          this.host.settings.defaultMode = parseViewMode(value, this.host.settings.defaultMode);
-          await this.host.saveSettings();
-        });
+        dd.setValue(this.host.settings.defaultMode).onChange((value) => this.setControlValue('defaultMode', value));
       });
 
     new Setting(containerEl)
-      .setName('Live preview delay')
-      .setDesc('How long to wait after you stop typing before the side-by-side preview updates, in milliseconds.')
+      .setName(SETTING_TEXT.previewDelayMs.name)
+      .setDesc(SETTING_TEXT.previewDelayMs.desc)
       .addSlider((s) =>
         s
-          .setLimits(PREVIEW_DELAY_RANGE.min, PREVIEW_DELAY_RANGE.max, 50)
+          .setLimits(PREVIEW_DELAY_RANGE.min, PREVIEW_DELAY_RANGE.max, PREVIEW_DELAY_STEP)
           .setValue(this.host.settings.previewDelayMs)
           .setDynamicTooltip()
-          .onChange(async (value) => {
-            this.host.settings.previewDelayMs = value;
-            await this.host.saveSettings();
-          }),
+          .onChange((value) => this.setControlValue('previewDelayMs', value)),
       );
   }
 }
