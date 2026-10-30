@@ -26,6 +26,10 @@ on:
 
 permissions:
   contents: write
+  # For the build provenance attestation below.
+  id-token: write
+  attestations: write
+  artifact-metadata: write
 
 jobs:
   release:
@@ -53,6 +57,17 @@ jobs:
       # gets attached below, and leaves the tagged tree untouched.
       - name: Sync the built assets into the repository root
         run: npm run sync:root
+
+      # Signs a statement that these three files were built by this workflow
+      # from this repository, so anyone can check a download with
+      #   gh attestation verify main.js --repo aREversez/obsidian-dita
+      - name: Attest build provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
 
       - name: Publish the release
         env:

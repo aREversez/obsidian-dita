@@ -207,7 +207,7 @@ export class DitaView extends TextFileView implements HoverParent {
     this.editorEl = panes.createDiv({ cls: 'dita-source' });
     this.siteNav = panes.createDiv({ cls: 'dita-site-nav' });
     this.siteNav.addEventListener('click', (evt) => this.onSiteNavClick(evt as MouseEvent));
-    this.siteNav.addEventListener('mouseover', (evt) => this.onSiteNavHover(evt as MouseEvent));
+    this.siteNav.addEventListener('mouseover', (evt) => this.onSiteNavHover(evt));
     this.scroller = panes.createDiv({ cls: 'dita-scroller' });
     this.host = this.scroller.createDiv({ cls: 'dita-view' });
     this.shadow = this.host.attachShadow({ mode: 'open' });
