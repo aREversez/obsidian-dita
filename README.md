@@ -112,14 +112,19 @@ reads it, so a product name in a bookmap title shows up there too. Click a row
 to go there: the
 preview scrolls to it in reading view, and with the source showing the caret
 moves to that line. The list follows your typing after a short pause and keeps
-the last good one while the XML is not well-formed. The row for the heading
-under the caret is not highlighted, and "follow cursor" does nothing for DITA
-files.
+the last good one while the XML is not well-formed. The row of the heading you
+are at is highlighted, and the Outline's "follow cursor" button keeps it in
+view. With the source showing (source mode, or side by side) that is the
+heading the caret is in; in reading view it is the one at the top of the
+preview. A map's reading view, site view and book view show no lines of the
+file the Outline lists, so nothing is highlighted there.
 
-Obsidian offers plugins no way to feed the Outline, so this plugin wraps two
-methods of the Outline view. If a future Obsidian changes them, the plugin
-leaves the Outline alone and DITA files show "No headings found" there, as
-before; nothing else is affected.
+Obsidian offers plugins no way to feed the Outline, so this plugin wraps three
+methods of the Outline view. If a future Obsidian changes the first two
+(`getHeadings`, `findCorrespondingLeaf`), the plugin leaves the Outline alone
+and DITA files show "No headings found" there, as before; if it changes the
+third (`findActiveHeading`), the list still works and no row is highlighted.
+Nothing else is affected.
 
 ## Find in the preview
 

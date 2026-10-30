@@ -3,18 +3,25 @@
 // There is no public hook for this. The Outline view builds its list from
 // `metadataCache.getFileCache(file).headings`, which Obsidian fills for
 // Markdown only, and it returns an empty list for any file whose extension is
-// not "md" before it even looks. So the one way in is to wrap two methods on
-// the Outline view's prototype:
+// not "md" before it even looks. So the one way in is to wrap methods on the
+// Outline view's prototype:
 //
 //   getHeadings()           what to list for `this.file`
 //   findCorrespondingLeaf() which pane a click on a row should scroll
+//   findActiveHeading()     which row is the current one (optional, see below)
 //
-// Both wrappers pass every other file straight to the original. The wrapping
-// is guarded: if a future Obsidian renames or drops either method nothing is
-// wrapped and the Outline simply shows "No headings found" for DITA files, as
-// it did before. Nothing here may throw into the Outline.
+// The wrappers pass every other file straight to the original. The wrapping
+// is guarded: if a future Obsidian renames or drops either of the first two
+// nothing is wrapped and the Outline simply shows "No headings found" for DITA
+// files, as it did before. Without the third the list works and no row is
+// marked as current. Nothing here may throw into the Outline.
+//
+// The Outline marks the current row when it redraws and when a Markdown view
+// reports a caret or scroll move. A DITA view reports neither, so it calls
+// markActiveHeading() itself when it moves.
 
 import type { App, TFile, WorkspaceLeaf } from 'obsidian';
+import { activeHeadingIndex } from './outlineHeadings';
 import type { OutlineHeading } from './outlineHeadings';
 
 export const OUTLINE_VIEW_TYPE = 'outline';
@@ -27,6 +34,12 @@ export interface OutlineViewLike {
   // they must not look like methods that lose their `this` when detached.
   getHeadings: (this: OutlineViewLike) => unknown[];
   findCorrespondingLeaf: (this: OutlineViewLike) => WorkspaceLeaf | null;
+  /** The row of the current heading for an owner view (a Markdown view, for Obsidian), or null. */
+  findActiveHeading?: (this: OutlineViewLike, owner: unknown) => unknown;
+  /** Mark a row (what findActiveHeading returns) as the current one; null clears it. */
+  setHighlightedItem?: (this: OutlineViewLike, row: unknown) => void;
+  /** The rows: `root.vChildren.children`, each row again holding its sub-rows the same way. */
+  tree?: { root?: unknown };
   requestUpdate?: () => void;
 }
 
@@ -36,6 +49,50 @@ export interface OutlineSource {
   headings(file: TFile): OutlineHeading[];
   /** The pane showing `file` in the DITA view that a row of `outline` should scroll. */
   leafFor(outline: OutlineViewLike, file: TFile): WorkspaceLeaf | null;
+  /**
+   * The line (zero-based) of `file` that the DITA view `outline` follows is at:
+   * the caret's, or the top of the preview. Undefined when no line stands for
+   * the view (no pane, or a pane showing something other than this file's text).
+   */
+  activeLine(outline: OutlineViewLike, file: TFile): number | undefined;
+}
+
+/** A row of the Outline's tree, as far as this module reads one. */
+interface OutlineRow {
+  heading?: unknown;
+  vChildren?: { children?: unknown };
+}
+
+/** The rows of the tree, depth first, so in the order of the headings they were built from. */
+function outlineRows(tree: OutlineViewLike['tree']): OutlineRow[] {
+  const rows: OutlineRow[] = [];
+  const walk = (parent: unknown): void => {
+    const children = (parent as OutlineRow | undefined)?.vChildren?.children;
+    if (!Array.isArray(children)) return;
+    for (const child of children as OutlineRow[]) {
+      rows.push(child);
+      walk(child);
+    }
+  };
+  walk(tree?.root);
+  return rows;
+}
+
+function hasPosition(heading: unknown): heading is OutlineHeading {
+  const line = (heading as Partial<OutlineHeading> | undefined)?.position?.start?.line;
+  return typeof line === 'number' && typeof (heading as OutlineHeading).position.end?.line === 'number';
+}
+
+/**
+ * The row that owns `line`, or null. The rows are read for their headings
+ * (those this plugin handed the Outline), so what is marked is what is listed,
+ * even for the moment between an edit and the redraw it causes.
+ */
+export function rowAtLine(tree: OutlineViewLike['tree'], line: number | undefined): unknown {
+  if (line === undefined) return null;
+  const rows = outlineRows(tree).filter((row) => hasPosition(row.heading));
+  const at = activeHeadingIndex(rows.map((row) => row.heading as OutlineHeading), line);
+  return at < 0 ? null : rows[at];
 }
 
 /**
@@ -95,6 +152,22 @@ export function refreshOutlines(app: App, file: TFile | null): void {
 }
 
 /**
+ * Ask the Outline panes showing `file` to mark the row of the heading its DITA
+ * view is at now. Called when that view's caret or scroll moves.
+ */
+export function markActiveHeading(app: App, file: TFile): void {
+  for (const view of loadedOutlines(app)) {
+    if (view.file !== file) continue;
+    if (typeof view.findActiveHeading !== 'function' || typeof view.setHighlightedItem !== 'function') continue;
+    try {
+      view.setHighlightedItem(view.findActiveHeading(null));
+    } catch {
+      // The Outline is not ours; a failed mark there must not reach the caller.
+    }
+  }
+}
+
+/**
  * Wrap the Outline view's methods as soon as one exists, and again on each
  * layout change until that has happened. Returns the function that undoes it.
  */
@@ -107,6 +180,7 @@ export function installOutlinePatch(app: App, source: OutlineSource): () => void
   const wrap = (proto: OutlineViewLike): void => {
     const getHeadings = proto.getHeadings;
     const findLeaf = proto.findCorrespondingLeaf;
+    const findActive = proto.findActiveHeading;
     const ownGetHeadings = function (this: OutlineViewLike): unknown[] {
       try {
         if (active && this.file && source.isDita(this.file)) return source.headings(this.file);
@@ -125,13 +199,32 @@ export function installOutlinePatch(app: App, source: OutlineSource): () => void
       }
       return findLeaf.call(this);
     };
+    // Obsidian calls this with the Markdown view that owns the file, which a
+    // DITA file never has, so for one the owner is ignored and the row comes
+    // from the line the DITA view is at.
+    const ownFindActive =
+      typeof findActive === 'function'
+        ? function (this: OutlineViewLike, owner: unknown): unknown {
+            try {
+              if (active && this.file && source.isDita(this.file)) {
+                return rowAtLine(this.tree, source.activeLine(this, this.file));
+              }
+            } catch (e) {
+              console.error('DITA Viewer: could not find the current heading for the Outline', e);
+              return null;
+            }
+            return findActive.call(this, owner);
+          }
+        : undefined;
     proto.getHeadings = ownGetHeadings;
     proto.findCorrespondingLeaf = ownFindLeaf;
+    if (ownFindActive) proto.findActiveHeading = ownFindActive;
     restore = () => {
       // Another plugin may have wrapped ours since; leave its wrapper alone
       // (ours then passes through, as `active` is false).
       if (proto.getHeadings === ownGetHeadings) proto.getHeadings = getHeadings;
       if (proto.findCorrespondingLeaf === ownFindLeaf) proto.findCorrespondingLeaf = findLeaf;
+      if (ownFindActive && proto.findActiveHeading === ownFindActive) proto.findActiveHeading = findActive;
     };
   };
 

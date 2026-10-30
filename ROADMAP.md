@@ -20,12 +20,15 @@ starting work; update the checkboxes in the same change that finishes an item.
       preview, outline, site and book views (Phase 3 below).
 - [x] Obsidian's Outline pane lists the headings of an open `.dita` / `.ditamap`
       and scrolls to them on click. Obsidian has no hook for this, so the
-      plugin wraps `getHeadings` and `findCorrespondingLeaf` on the Outline
-      view's prototype (`outlinePatch.ts`), guarded so that a changed Outline
-      leaves it alone. Unit-tested against a stand-in view and checked against
-      the 1.14.5 bundle's source. In a running Obsidian it lists the headings
-      and scrolls on click; the row of the current heading is not highlighted
-      yet.
+      plugin wraps `getHeadings`, `findCorrespondingLeaf` and
+      `findActiveHeading` on the Outline view's prototype (`outlinePatch.ts`),
+      guarded so that a changed Outline leaves it alone. Unit-tested against a
+      stand-in view and checked against the source of the 1.5.12, 1.8.10,
+      1.11.7 and 1.14.5 bundles. In a running Obsidian it lists the headings
+      and scrolls on click. The row of the current heading is highlighted (the
+      caret's with the source showing, the top of the preview in reading view;
+      none in a map's reading view, site view or book view, which show no
+      lines of the file); not yet tried in a running Obsidian.
 - [x] Find in the preview (Ctrl/Cmd+F), in reading, split, site and book view.
 - [x] Hover preview: Ctrl/Cmd over a link to another DITA file shows it in
       Obsidian's Page Preview popover, and `![[topic.dita]]` embeds a topic (a

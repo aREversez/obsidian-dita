@@ -203,6 +203,26 @@ function flatten(
   }
 }
 
+/**
+ * Index of the row that owns `line` (zero-based), or -1 when the line is above
+ * the first row. That is the innermost row whose element spans the line: the
+ * last such row in document order, since a nested row comes after its parent.
+ * A line no row spans (a bookmap's `<frontmatter>` wrapper, say) belongs to
+ * the nearest row above it, as a line of a Markdown note belongs to the
+ * heading above it.
+ */
+export function activeHeadingIndex(headings: ReadonlyArray<Pick<OutlineHeading, 'position'>>, line: number): number {
+  let inside = -1;
+  let above = -1;
+  for (let i = 0; i < headings.length; i++) {
+    const { start, end } = headings[i].position;
+    if (start.line > line) continue;
+    above = i;
+    if (end.line >= line) inside = i;
+  }
+  return inside >= 0 ? inside : above;
+}
+
 /** The map's own title element (`<booktitle>` of a bookmap, else `<title>`), for its row. */
 function mapTitle(
   root: DitaNode,

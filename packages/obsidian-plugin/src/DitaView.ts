@@ -20,7 +20,7 @@ import { outlineEntryPosition } from './mapOutline';
 import { detectEol, toLf, withEol } from './lineEndings';
 import type { Eol } from './lineEndings';
 import { isExternalHref, resolveLinkTarget } from './linkTarget';
-import { refreshOutlines } from './outlinePatch';
+import { markActiveHeading, refreshOutlines } from './outlinePatch';
 import { getSheets } from './previewSheets';
 import { PreviewFind } from './previewFind';
 import { StructureSpec, WrapSpec } from './snippetsData';
@@ -52,6 +52,14 @@ function hidePopover(popover: HoverPopover | null): void {
 
 /** After the preview is told to jump to a line, ignore the editor's own scroll echo for this long. */
 const SYNC_QUIET_MS = 250;
+
+/**
+ * A heading counts as the one the preview is at once its top is this close to
+ * the top of the pane. Scrolling to a row of the Outline puts the heading right
+ * at the top, give or take the pixel rounding of a scroll position, and that
+ * row has to be the one marked, not the row above it.
+ */
+const OUTLINE_REACH_PX = 8;
 
 /** The key a keyref/conkeyref names: everything before the first '/'. */
 /** Show or hide a header button with a class, not an inline style. */
@@ -139,6 +147,8 @@ export class DitaView extends TextFileView implements HoverParent {
   private readonly previewEcho = new EchoGuard();
   private readonly editorEcho = new EchoGuard();
   private syncEditorFrame = 0;
+  /** The frame that tells the Outline where this view is; one however often the view moves. */
+  private outlineMarkFrame = 0;
   private find?: PreviewFind;
   /** Obsidian's Page Preview keeps the popover it opens over one of this view's links here. */
   hoverPopover: HoverPopover | null = null;
@@ -230,13 +240,23 @@ export class DitaView extends TextFileView implements HoverParent {
     // Focusable by click, so Ctrl/Cmd+A selects the topic rather than the whole app.
     this.scroller.tabIndex = -1;
     this.scroller.addEventListener('keydown', (evt) => this.onPreviewKey(evt));
-    this.scroller.addEventListener('scroll', () => this.queueSyncToEditor(), { passive: true });
+    this.scroller.addEventListener(
+      'scroll',
+      () => {
+        this.queueSyncToEditor();
+        this.markOutlineHeading();
+      },
+      { passive: true },
+    );
 
     this.editor = createSourceEditor(this.editorEl, {
       text: this.data ?? '',
       onChange: (text) => this.onEdited(text),
       onScroll: () => this.queueSyncToPreview(),
-      onCursorLine: (line) => this.revealInPreview(line),
+      onCursorLine: (line) => {
+        this.revealInPreview(line);
+        this.markOutlineHeading();
+      },
       completion: ditaCompletionSource(() => this.completionEnv()),
       lint: (text) => this.lintSource(text),
       onReference: (ref, evt) => this.openReference(ref, evt),
@@ -301,6 +321,7 @@ export class DitaView extends TextFileView implements HoverParent {
     this.scheduleOutlineRefresh.cancel();
     if (this.syncFrame) this.containerEl.win.cancelAnimationFrame(this.syncFrame);
     if (this.syncEditorFrame) this.containerEl.win.cancelAnimationFrame(this.syncEditorFrame);
+    if (this.outlineMarkFrame) this.containerEl.win.cancelAnimationFrame(this.outlineMarkFrame);
     this.find?.destroy();
     this.find = undefined;
     window.clearTimeout(this.hoverHideTimer);
@@ -482,6 +503,8 @@ export class DitaView extends TextFileView implements HoverParent {
     }
     // Typing while only the source was showing left the preview behind.
     if (panes.preview && this.previewStale && this.file) void this.render();
+    // What the Outline follows (the caret, or the preview) depends on the mode.
+    this.markOutlineHeading();
     if (panes.editor) {
       // CodeMirror cannot measure while hidden; once visible, measure and line up the preview.
       this.nextFrame(() => {
@@ -1046,6 +1069,8 @@ export class DitaView extends TextFileView implements HoverParent {
     this.previewStale = false;
     this.updateScheme();
     this.setPreviewScroll(scrollTop);
+    // The page changed under the same scroll position.
+    this.markOutlineHeading();
     // A cross-page site xref asks for an element on the page that just
     // arrived; the page has to be laid out before it can be scrolled to.
     const anchor = this.sitePendingAnchor;
@@ -1145,6 +1170,34 @@ export class DitaView extends TextFileView implements HoverParent {
     if (!isOffsetVisible(offset, this.scroller.scrollTop, h, h * 0.2)) {
       this.setPreviewScroll(Math.max(0, offset - h * 0.3));
     }
+  }
+
+  // ── the Outline pane's current heading ──
+
+  /**
+   * The line the Outline's current heading follows: the caret's while the
+   * source is showing (side by side included), otherwise the line at the top of
+   * the preview. A map's outline tree, the site and the book show no lines of
+   * this file's text, so no line stands for them.
+   */
+  outlineLine(): number | undefined {
+    if (!this.editor) return undefined;
+    if (panesFor(this.mode).editor) {
+      const state = this.editor.view.state;
+      return state.doc.lineAt(state.selection.main.head).number - 1;
+    }
+    if (this.mode !== 'reading') return undefined;
+    const line = lineForPreviewOffset(this.measureAnchors(), this.scroller.scrollTop + OUTLINE_REACH_PX);
+    return line === undefined ? undefined : Math.floor(line);
+  }
+
+  /** Tell the Outline panes showing this file which heading this view is at, on the next frame. */
+  private markOutlineHeading(): void {
+    if (this.outlineMarkFrame || !this.file) return;
+    this.outlineMarkFrame = this.nextFrame(() => {
+      this.outlineMarkFrame = 0;
+      if (this.file) markActiveHeading(this.app, this.file);
+    });
   }
 
   // ── preview interaction ──
