@@ -23,7 +23,13 @@ starting work; update the checkboxes in the same change that finishes an item.
       plugin wraps `getHeadings` and `findCorrespondingLeaf` on the Outline
       view's prototype (`outlinePatch.ts`), guarded so that a changed Outline
       leaves it alone. Unit-tested against a stand-in view and checked against
-      the 1.14.5 bundle's source; not yet tried in a running Obsidian.
+      the 1.14.5 bundle's source. In a running Obsidian it lists the headings
+      and scrolls on click; the row of the current heading is not highlighted
+      yet.
+- [x] Find in the preview (Ctrl/Cmd+F), in reading, split, site and book view.
+- [x] Hover preview: Ctrl/Cmd over a link to another DITA file shows it in
+      Obsidian's Page Preview popover, and `![[topic.dita]]` embeds a topic (a
+      map shows its outline).
 
 ## Next
 
@@ -87,14 +93,20 @@ values is unticked; this one follows DITA-OT (every value of one attribute).
 - [x] Version and `manifest.json` hygiene (one manifest at the repo root,
       `versions.json`, `npm run release:check`), release workflow that attaches
       `main.js`, `manifest.json`, `styles.css` (`.github/workflows/release.yml`).
-      The workflow has not run yet: it needs a first tag pushed to GitHub.
+      Tags `0.1.0` and `0.2.0` are pushed.
 - [x] BRAT install and the desktop-only note are in the README.
-- [ ] Trial through BRAT with a first tag (`0.1.0`), then consider the community
-      plugin directory (needs screenshots; its review also reads the README).
+- [x] README screenshot, and the community plugin directory's review findings
+      except the two below.
+- [ ] Trial through BRAT from a release tag.
+- [ ] Community plugin directory: get the submission through review. Two
+      findings stay open because fixing them needs Obsidian 1.13 and
+      `minAppVersion` is 1.5.0: `getSettingDefinitions()` for the settings tab,
+      and `setDynamicTooltip()` on the preview-delay slider (1.13 shows its
+      value inline). Raising `minAppVersion` closes both.
 
 ### In parallel, later
 
-- [ ] Make the VS Code DITA Viewer depend on `@dita-viewer/core` instead of its
+- [x] Make the VS Code DITA Viewer depend on `@dita-viewer/core` instead of its
       own copies. Decided: publish the core to npm and depend on it by version.
       The core's source moved into the viewer's repository (`packages/core`,
       with its own README), so it is edited and released there.

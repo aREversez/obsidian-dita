@@ -28,8 +28,8 @@ conref "jump to source" in the preview, wrap and insert commands, the
 a `.ditaval` or hand-picked values (below), and a quick switcher for `.dita` /
 `.ditamap` files.
 
-Not yet: Git compare, DITA-OT. Mobile is not supported because the core reads
-files through Node.
+Out of scope for now: Git compare and DITA-OT publishing (see the roadmap).
+Mobile is not supported because the core reads files through Node.
 
 ## View modes
 
