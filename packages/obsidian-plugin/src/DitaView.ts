@@ -207,6 +207,7 @@ export class DitaView extends TextFileView implements HoverParent {
     this.editorEl = panes.createDiv({ cls: 'dita-source' });
     this.siteNav = panes.createDiv({ cls: 'dita-site-nav' });
     this.siteNav.addEventListener('click', (evt) => this.onSiteNavClick(evt as MouseEvent));
+    this.siteNav.addEventListener('mouseover', (evt) => this.onSiteNavHover(evt as MouseEvent));
     this.scroller = panes.createDiv({ cls: 'dita-scroller' });
     this.host = this.scroller.createDiv({ cls: 'dita-view' });
     this.shadow = this.host.attachShadow({ mode: 'open' });
@@ -220,6 +221,10 @@ export class DitaView extends TextFileView implements HoverParent {
     this.shadow.addEventListener('click', (evt) => this.onClick(evt as MouseEvent));
     this.shadow.addEventListener('contextmenu', (evt) => this.onContextMenu(evt as MouseEvent));
     this.shadow.addEventListener('mouseover', (evt) => this.onHoverMove(evt as MouseEvent));
+    // The pointer left the preview altogether (Page Preview closes the popover itself): the next link is a new one.
+    this.host.addEventListener('mouseleave', () => {
+      this.hoverLink = undefined;
+    });
     this.shadow.addEventListener('pointermove', (evt) => this.onConrefHover(evt as PointerEvent));
     this.host.addEventListener('pointerleave', () => this.host.classList.remove('dv-conref-hot'));
     // Focusable by click, so Ctrl/Cmd+A selects the topic rather than the whole app.
@@ -588,6 +593,28 @@ export class DitaView extends TextFileView implements HoverParent {
         else if (row.bottom > box.bottom) scroll.scrollTop += row.bottom - box.bottom + 8;
       });
     }
+  }
+
+  /**
+   * A row of the site's navigation tree. It is in the page's own document,
+   * unlike the links in the preview, so Page Preview can anchor the popover
+   * to the row itself and closes it when the pointer leaves.
+   */
+  private onSiteNavHover(evt: MouseEvent): void {
+    const link = (evt.target as Element | null)?.closest<HTMLElement>('a[data-site-target]');
+    const absPath = link?.dataset.siteTarget;
+    const vaultRoot = this.vaultRoot();
+    if (!link || !absPath || !vaultRoot || !this.file) return;
+    const target = resolveLinkTarget(vaultRoot, this.file.path, absPath);
+    if (!target) return;
+    this.app.workspace.trigger('hover-link', {
+      event: evt,
+      source: HOVER_SOURCE,
+      hoverParent: this,
+      targetEl: link,
+      linktext: target.path,
+      sourcePath: this.file.path,
+    });
   }
 
   private onSiteNavClick(evt: MouseEvent): void {

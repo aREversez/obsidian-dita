@@ -1,7 +1,7 @@
 {
   "id": "dita-viewer",
   "name": "DITA Viewer",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "minAppVersion": "1.5.0",
   "description": "Read, edit and preview DITA topics and maps (.dita, .ditamap): a reading view that follows your theme, source and live preview, map outline, site and book views, and conditional processing with .ditaval.",
   "author": "aREversez",
