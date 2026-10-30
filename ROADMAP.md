@@ -96,16 +96,17 @@ values is unticked; this one follows DITA-OT (every value of one attribute).
 - [x] Version and `manifest.json` hygiene (one manifest at the repo root,
       `versions.json`, `npm run release:check`), release workflow that attaches
       `main.js`, `manifest.json`, `styles.css` (`.github/workflows/release.yml`).
-      Tags `0.1.0` and `0.2.0` are pushed.
+      Tags `0.1.0` to `0.2.2` are pushed. The workflow also attests build
+      provenance for the three files (`gh attestation verify`).
 - [x] BRAT install and the desktop-only note are in the README.
-- [x] README screenshot, and the community plugin directory's review findings
-      except the two below.
+- [x] README screenshot, and the community plugin directory's review findings.
+      The settings tab also defines its settings declaratively
+      (`getSettingDefinitions`, for Obsidian 1.13's settings search) next to
+      `display()`, which still draws it before 1.13, so `minAppVersion` stays
+      1.5.0. `setDynamicTooltip()` stays in that older path, where it is what
+      shows the slider value.
 - [ ] Trial through BRAT from a release tag.
-- [ ] Community plugin directory: get the submission through review. Two
-      findings stay open because fixing them needs Obsidian 1.13 and
-      `minAppVersion` is 1.5.0: `getSettingDefinitions()` for the settings tab,
-      and `setDynamicTooltip()` on the preview-delay slider (1.13 shows its
-      value inline). Raising `minAppVersion` closes both.
+- [ ] Community plugin directory: get the submission through review.
 
 ### In parallel, later
 
@@ -138,7 +139,7 @@ values is unticked; this one follows DITA-OT (every value of one attribute).
         of them.
   - [x] Publish 0.2.0, which exports the remaining 61 (`src/index.ts`, pinned
         by `test/publicApi.test.ts`).
-  - [x] In the extension: depend on the package (pinned to 0.2.0), replace its
+  - [x] In the extension: depend on the package (pinned; 0.2.2 now), replace its
         imports of the copied modules, delete the copies, and adjust its
         build and tests.
 
