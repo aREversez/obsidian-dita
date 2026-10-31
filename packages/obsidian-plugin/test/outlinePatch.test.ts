@@ -192,7 +192,7 @@ const outlineTree = () => {
 };
 
 describe('Outline patch: the current heading', () => {
-  it('is the row of the innermost heading around the line the DITA view is at', () => {
+  it('is the row of the last heading starting on or before the line the DITA view is at', () => {
     const view = new (makeOutlineClass())();
     installOutlinePatch(fakeApp([{ isDeferred: false, view }]).app, source);
     const { tree, topic, plan, run, sample } = outlineTree();
@@ -202,11 +202,13 @@ describe('Outline patch: the current heading', () => {
       currentLine = line;
       return view.findActiveHeading({});
     };
+    assert.equal(at(0), topic);
     assert.equal(at(4), plan);
+    assert.equal(at(7), plan); // after Plan's element ended, before the next heading
     assert.equal(at(9), run);
     assert.equal(at(11), sample);
-    assert.equal(at(14), run); // after the example ended
-    assert.equal(at(18), topic); // after both sections ended
+    assert.equal(at(14), sample); // after the example ended
+    assert.equal(at(18), sample);
   });
 
   it('ignores the owner Obsidian passes, which is never a Markdown view for a DITA file', () => {

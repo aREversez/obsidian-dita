@@ -84,7 +84,8 @@ function hasPosition(heading: unknown): heading is OutlineHeading {
 }
 
 /**
- * The row that owns `line`, or null. The rows are read for their headings
+ * The row that owns `line` (the last one starting on or before it), or null.
+ * The rows are read for their headings
  * (those this plugin handed the Outline), so what is marked is what is listed,
  * even for the moment between an edit and the redraw it causes.
  */

@@ -204,23 +204,20 @@ function flatten(
 }
 
 /**
- * Index of the row that owns `line` (zero-based), or -1 when the line is above
- * the first row. That is the innermost row whose element spans the line: the
- * last such row in document order, since a nested row comes after its parent.
- * A line no row spans (a bookmap's `<frontmatter>` wrapper, say) belongs to
- * the nearest row above it, as a line of a Markdown note belongs to the
- * heading above it.
+ * Index of the row that owns `line` (zero-based): the last row in document
+ * order that starts on or before it, or -1 when the line is above the first
+ * row. This is how a line of a Markdown note belongs to the heading above it,
+ * and it keeps the answer moving only forward as the line does. Picking the
+ * innermost row whose element spans the line instead hands the line back to
+ * the parent in every gap between two sections, so the marked row would jump
+ * between the topic and its sections while scrolling or typing.
  */
 export function activeHeadingIndex(headings: ReadonlyArray<Pick<OutlineHeading, 'position'>>, line: number): number {
-  let inside = -1;
-  let above = -1;
+  let at = -1;
   for (let i = 0; i < headings.length; i++) {
-    const { start, end } = headings[i].position;
-    if (start.line > line) continue;
-    above = i;
-    if (end.line >= line) inside = i;
+    if (headings[i].position.start.line <= line) at = i;
   }
-  return inside >= 0 ? inside : above;
+  return at;
 }
 
 /** The map's own title element (`<booktitle>` of a bookmap, else `<title>`), for its row. */
