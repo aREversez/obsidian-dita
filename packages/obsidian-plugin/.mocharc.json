@@ -1,5 +1,6 @@
 {
   "spec": "dist-test/test/**/*.test.js",
+  "require": ["dist-test/test/obsidianStub.js"],
   "timeout": 10000,
   "ui": "bdd"
 }
