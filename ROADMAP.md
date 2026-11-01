@@ -31,7 +31,11 @@ starting work; update the checkboxes in the same change that finishes an item.
       lines of the file). Checked in Obsidian 1.14.5: a click moves the caret
       or scrolls the preview, the row follows the caret and the scroll, the
       Outline's auto-scroll button keeps it in view once the list overflows,
-      and the console logs no "changed shape" warning.
+      and the console logs no "changed shape" warning. Following the scroll in
+      reading view stays, since it is the only line a long topic offers there
+      and it costs nothing while no Outline pane is open (only the Outline
+      asks for that line); a map's reading view, the site and the book stay
+      unmarked on purpose.
 - [x] Find in the preview (Ctrl/Cmd+F), in reading, split, site and book view.
 - [x] Hover preview: Ctrl/Cmd over a link to another DITA file shows it in
       Obsidian's Page Preview popover, and `![[topic.dita]]` embeds a topic (a
