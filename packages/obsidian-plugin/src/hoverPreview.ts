@@ -10,7 +10,7 @@
 // view passes; that is why the view lends this one field through an accessor
 // rather than keeping a copy.
 
-import { App, HoverParent, HoverPopover, TFile } from 'obsidian';
+import type { App, HoverParent, HoverPopover, TFile } from 'obsidian';
 import { isExternalHref, resolveLinkTarget } from './linkTarget';
 import { HOVER_SOURCE } from './hoverSource';
 

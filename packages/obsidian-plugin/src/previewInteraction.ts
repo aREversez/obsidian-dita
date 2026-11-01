@@ -12,9 +12,9 @@ import { App, Keymap, Menu, TFile, normalizePath } from 'obsidian';
 import { decodeHrefPart } from '@dita-viewer/core';
 import { isExternalHref, resolveLinkTarget } from './linkTarget';
 import { PreviewFind } from './previewFind';
-import { SiteNav } from './siteNav';
-import { SourceNavigation } from './sourceNavigation';
+import type { SiteNav } from './siteNav';
 import type { SourceEditor } from './sourceEditor';
+import type { SourceNavigation } from './sourceNavigation';
 import { MODE_LABELS, panesFor } from './viewMode';
 import type { ViewMode } from './viewMode';
 
