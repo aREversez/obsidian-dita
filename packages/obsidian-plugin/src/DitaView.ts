@@ -1,16 +1,17 @@
 import { FileSystemAdapter, HoverParent, HoverPopover, Keymap, Menu, Notice, TFile, TextFileView, ViewStateResult, WorkspaceLeaf, moment, normalizePath, setIcon } from 'obsidian';
 import { dirname, isAbsolute, join, relative, resolve } from 'path';
 import { collectDiagnostics, decodeHrefPart, getKeyDefs, isExcluded, profileGroups, profileValuesOfKeys, splitRefFragment } from '@dita-viewer/core';
-import type { Ditaval, ProfileFilter, ProfileGroup, SiteNavEntry } from '@dita-viewer/core';
+import type { Ditaval, ProfileFilter, ProfileGroup } from '@dita-viewer/core';
 import { renderBookFile, renderDitaFile, renderDitamapFile, renderSiteFile } from './renderFile';
 import type { RenderFileResult } from './renderFile';
-import { siteLabels } from './roleLabels';
 import { SettingsProvider } from './settings';
 import { MODE_ICONS, MODE_LABELS, ViewMode, modesFor, panesFor, parseViewMode, previewKindFor, toggleMode } from './viewMode';
 import { SourceEditor, createSourceEditor } from './sourceEditor';
 import { createCompletionEnv } from './completionEnv';
 import { ditaCompletionSource } from './completionSource';
 import { ScrollSync } from './scrollSync';
+import { SiteNav } from './siteNav';
+import { HOVER_SOURCE } from './hoverSource';
 import { Debounced, debounce } from './debounce';
 import { ProblemRange, problemRanges } from './sourceDiagnostics';
 import { SourceReference, positionOfId } from './references';
@@ -42,8 +43,8 @@ import { DitavalPicker } from './pickers';
 
 export const VIEW_TYPE_DITA = 'dita-viewer-topic';
 
-/** The id the preview's links hover under; Settings > Page preview lists it, and the plugin registers it. */
-export const HOVER_SOURCE = 'dita-viewer';
+/** The id the preview's links hover under, re-exported where the plugin registers it. */
+export { HOVER_SOURCE };
 
 /** Close a hover popover. `hide` is not in Obsidian's typings, so it is looked for; a popover without it just times out as usual. */
 function hidePopover(popover: HoverPopover | null): void {
@@ -103,22 +104,8 @@ export class DitaView extends TextFileView implements HoverParent {
   private backAction!: HTMLElement;
   /** The site sidebar, outside the preview's Shadow DOM. */
   private siteNav!: HTMLElement;
-  private sitePrevAction!: HTMLElement;
-  private siteNextAction!: HTMLElement;
-  private siteEntries: SiteNavEntry[] = [];
-  private sitePages: Array<{ absPath: string; title: string }> = [];
-  private siteCurrent?: string;
-  /** The page the preview actually shows; siteCurrent is where the reader asked to go. */
-  private siteShown?: string;
-  /** Raw topic titles by file, so unnamed topics are not re-read on every render. */
-  private readonly siteTitleCache = new Map<string, { stamp: string; title: string | null }>();
-  private siteMapTitle?: string;
-  /** Relative path of the map the site state above describes. */
-  private siteMapPath?: string;
-  /** Element id to reveal after the next site page is in the DOM. */
-  private sitePendingAnchor?: string;
-  /** Makes each rebuilt sidebar's accessible title id unique in the document. */
-  private siteNavTitleSeq = 0;
+  /** The site view's manifest, page and buttons (siteNav.ts). */
+  private site!: SiteNav;
 
   private dependencies = new Set<string>();
   /** Files the last diagnostics run read (reference targets, key maps). */
@@ -201,8 +188,6 @@ export class DitaView extends TextFileView implements HoverParent {
     const panes = this.container.createDiv({ cls: 'dita-panes' });
     this.editorEl = panes.createDiv({ cls: 'dita-source' });
     this.siteNav = panes.createDiv({ cls: 'dita-site-nav' });
-    this.siteNav.addEventListener('click', (evt) => this.onSiteNavClick(evt as MouseEvent));
-    this.siteNav.addEventListener('mouseover', (evt) => this.onSiteNavHover(evt));
     this.scroller = panes.createDiv({ cls: 'dita-scroller' });
     this.host = this.scroller.createDiv({ cls: 'dita-view' });
     this.shadow = this.host.attachShadow({ mode: 'open' });
@@ -257,10 +242,30 @@ export class DitaView extends TextFileView implements HoverParent {
 
     this.backAction = this.addAction('arrow-left', 'Back to the previous view', () => this.goBack());
     setShown(this.backAction, false);
-    this.sitePrevAction = this.addAction('chevron-left', 'Previous topic', () => this.stepSite(-1));
-    this.sitePrevAction.addClass('dita-site-step');
-    this.siteNextAction = this.addAction('chevron-right', 'Next topic', () => this.stepSite(1));
-    this.siteNextAction.addClass('dita-site-step');
+    const sitePrevAction = this.addAction('chevron-left', 'Previous topic', () => this.site.step(-1));
+    sitePrevAction.addClass('dita-site-step');
+    const siteNextAction = this.addAction('chevron-right', 'Next topic', () => this.site.step(1));
+    siteNextAction.addClass('dita-site-step');
+    this.site = new SiteNav({
+      app: this.app,
+      hoverParent: this,
+      el: this.siteNav,
+      prevAction: sitePrevAction,
+      nextAction: siteNextAction,
+      file: () => this.file,
+      mode: () => this.mode,
+      vaultRoot: () => this.vaultRoot(),
+      shadow: () => this.shadow,
+      markStale: () => {
+        this.previewStale = true;
+      },
+      render: () => void this.render(),
+      setPreviewScroll: (top) => this.sync.setPreviewScroll(top),
+      nextFrame: (cb) => this.nextFrame(cb),
+      openSource: (absPath, place, evt) => this.openSource(absPath, place, evt),
+    });
+    this.siteNav.addEventListener('click', (evt) => this.site.onNavClick(evt as MouseEvent));
+    this.siteNav.addEventListener('mouseover', (evt) => this.site.onNavHover(evt));
     this.modeAction = this.addAction(MODE_ICONS[this.mode], 'View mode', (evt) => this.showModeMenu(evt));
     this.profileAction = this.addAction('filter', 'Conditional processing', () => this.toggleProfilePanel());
     this.profileAction.addClass('dita-profile-action');
@@ -345,8 +350,8 @@ export class DitaView extends TextFileView implements HoverParent {
     }
     // Site state describes one map. Reusing the leaf for another map starts
     // from that map's first topic instead of carrying the old page along.
-    if (this.file && this.siteMapPath !== undefined && this.siteMapPath !== this.file.path) {
-      this.resetSiteState();
+    if (this.file && this.site?.mapPath !== undefined && this.site.mapPath !== this.file.path) {
+      this.site.reset();
     }
     this.scheduleRender.cancel();
     if (!this.editor) {
@@ -375,7 +380,7 @@ export class DitaView extends TextFileView implements HoverParent {
     this.body?.replaceChildren();
     this.filteredCount = 0;
     this.updateProfileAction();
-    this.resetSiteState();
+    this.site?.reset();
     this.dependencies.clear();
     this.lintDependencies.clear();
     this.showError(undefined);
@@ -483,9 +488,7 @@ export class DitaView extends TextFileView implements HoverParent {
     this.body?.classList.toggle('dita-body--site', this.mode === 'site');
     setIcon(this.modeAction, MODE_ICONS[this.mode]);
     this.modeAction.setAttribute('aria-label', MODE_LABELS[this.mode]);
-    setShown(this.sitePrevAction, this.mode === 'site');
-    setShown(this.siteNextAction, this.mode === 'site');
-    this.updateSiteNavActions();
+    this.site?.updateActions();
     this.updateBackAction();
     // Conditional processing acts on the preview; with only the source showing there is nothing to filter.
     setShown(this.profileAction, panes.preview);
@@ -522,177 +525,8 @@ export class DitaView extends TextFileView implements HoverParent {
 
   // ── site navigation ──
 
-  /** Forget the current map's sidebar/page state (new file, or clear()). */
-  private resetSiteState(): void {
-    this.siteEntries = [];
-    this.sitePages = [];
-    this.siteCurrent = undefined;
-    this.siteShown = undefined;
-    this.siteTitleCache.clear();
-    this.siteMapTitle = undefined;
-    this.siteMapPath = undefined;
-    this.sitePendingAnchor = undefined;
-    this.siteNav?.replaceChildren();
-    this.updateSiteNavActions();
-  }
-
-  /** Rebuild the sidebar from the manifest the last site render returned. */
-  private renderSiteNav(): void {
-    if (!this.siteNav) return;
-    const previousScroll = this.siteNav.querySelector<HTMLElement>('.dita-site-nav-scroll')?.scrollTop ?? 0;
-    this.siteNav.replaceChildren();
-
-    const header = this.siteNav.createDiv({ cls: 'dita-site-nav-header' });
-    const title = header.createDiv({
-      cls: 'dita-site-nav-title',
-      text: this.siteMapTitle ?? this.file?.basename ?? 'Site',
-    });
-    const titleId = `dita-site-nav-title-${++this.siteNavTitleSeq}`;
-    title.id = titleId;
-
-    const scroller = this.siteNav.createDiv({ cls: 'dita-site-nav-scroll' });
-    const tree = scroller.createEl('nav', { cls: 'dita-site-nav-tree' });
-    const labels = siteLabels(moment.locale());
-    // Label the navigation landmark from the visible map title. Do not use
-    // aria-label here: Obsidian turns any aria-label into a hover tooltip, and
-    // the nav covers the whole sidebar, so it would pop up over every row.
-    tree.setAttribute('aria-labelledby', titleId);
-    if (this.siteEntries.length === 0) {
-      scroller.createDiv({ cls: 'dita-site-nav-empty', text: labels.noTopics });
-      return;
-    }
-
-    const list = tree.createEl('ul', { cls: 'dita-site-tree' });
-    // Each surviving entry's original depth decides which open list it
-    // belongs to; entries are already compacted and in reading order.
-    const stack: Array<{ depth: number; list: HTMLElement }> = [{ depth: -1, list }];
-    for (let i = 0; i < this.siteEntries.length; i++) {
-      const entry = this.siteEntries[i];
-      while (stack.length > 1 && stack[stack.length - 1].depth >= entry.depth) stack.pop();
-      const parent = stack[stack.length - 1].list;
-      const item = parent.createEl('li', { cls: 'dita-site-item' });
-      const next = this.siteEntries[i + 1];
-      const hasChildren = next !== undefined && next.depth > entry.depth;
-
-      if (entry.isGroup || !entry.absPath) {
-        const group = item.createDiv({ cls: 'dita-site-group' });
-        if (entry.role) group.createSpan({ cls: 'dita-site-role', text: entry.role });
-        group.createSpan({ cls: 'dita-site-group-label', text: entry.title });
-      } else {
-        const link = item.createEl('a', { cls: 'dita-site-link', href: '#' });
-        link.dataset.siteTarget = entry.absPath;
-        if (entry.role) link.createSpan({ cls: 'dita-site-role', text: entry.role });
-        link.createSpan({ cls: 'dita-site-label', text: entry.title });
-        if (entry.absPath === this.siteCurrent) {
-          link.addClass('is-active');
-          link.setAttribute('aria-current', 'page');
-        }
-      }
-
-      if (hasChildren) {
-        const children = item.createEl('ul', { cls: 'dita-site-children' });
-        stack.push({ depth: entry.depth, list: children });
-      }
-    }
-
-    const scroll = scroller;
-    scroll.scrollTop = previousScroll;
-    const active = scroller.querySelector<HTMLElement>('.dita-site-link.is-active');
-    if (active) {
-      // Keep the current page's row visible without moving the page itself.
-      this.nextFrame(() => {
-        if (!active.isConnected) return;
-        const row = active.getBoundingClientRect();
-        const box = scroller.getBoundingClientRect();
-        if (row.top < box.top) scroll.scrollTop -= box.top - row.top + 8;
-        else if (row.bottom > box.bottom) scroll.scrollTop += row.bottom - box.bottom + 8;
-      });
-    }
-  }
-
-  /**
-   * A row of the site's navigation tree. It is in the page's own document,
-   * unlike the links in the preview, so Page Preview can anchor the popover
-   * to the row itself and closes it when the pointer leaves.
-   */
-  private onSiteNavHover(evt: MouseEvent): void {
-    const link = (evt.target as Element | null)?.closest<HTMLElement>('a[data-site-target]');
-    const absPath = link?.dataset.siteTarget;
-    const vaultRoot = this.vaultRoot();
-    if (!link || !absPath || !vaultRoot || !this.file) return;
-    const target = resolveLinkTarget(vaultRoot, this.file.path, absPath);
-    if (!target) return;
-    this.app.workspace.trigger('hover-link', {
-      event: evt,
-      source: HOVER_SOURCE,
-      hoverParent: this,
-      targetEl: link,
-      linktext: target.path,
-      sourcePath: this.file.path,
-    });
-  }
-
-  private onSiteNavClick(evt: MouseEvent): void {
-    const link = (evt.target as Element | null)?.closest<HTMLElement>('[data-site-target]');
-    const absPath = link?.dataset.siteTarget;
-    if (!link || !absPath) return;
-    evt.preventDefault();
-    if (Keymap.isModEvent(evt)) {
-      this.openSource(absPath, {}, evt);
-      return;
-    }
-    this.openSitePage(absPath);
-  }
-
-  /** Show/hide and enable the header's previous/next topic buttons. */
-  private updateSiteNavActions(): void {
-    if (!this.sitePrevAction || !this.siteNextAction) return;
-    const isSite = this.mode === 'site';
-    setShown(this.sitePrevAction, isSite);
-    setShown(this.siteNextAction, isSite);
-    if (!isSite) return;
-
-    const index = this.sitePages.findIndex((page) => page.absPath === this.siteCurrent);
-    const previous = index > 0 ? this.sitePages[index - 1] : undefined;
-    const next = index >= 0 ? this.sitePages[index + 1] : undefined;
-    this.setSiteAction(this.sitePrevAction, previous, 'Previous topic');
-    this.setSiteAction(this.siteNextAction, next, 'Next topic');
-  }
-
-  private setSiteAction(action: HTMLElement, target: { title: string } | undefined, fallback: string): void {
-    const disabled = target === undefined;
-    action.toggleClass('is-disabled', disabled);
-    action.setAttribute('aria-disabled', disabled ? 'true' : 'false');
-    action.setAttribute('aria-label', target ? `${fallback}: ${target.title}` : fallback);
-  }
-
-  private stepSite(delta: number): void {
-    const index = this.sitePages.findIndex((page) => page.absPath === this.siteCurrent);
-    const target = this.sitePages[index + delta];
-    if (target) this.openSitePage(target.absPath);
-  }
-
-  /** Switch the site to one topic page, optionally scrolling to an id in it. */
-  private openSitePage(absPath: string, anchor?: string): void {
-    if (this.mode !== 'site' || !absPath) return;
-    if (absPath === this.siteCurrent) {
-      if (anchor) this.scrollToSiteAnchor(anchor);
-      else this.sync.setPreviewScroll(0);
-      return;
-    }
-    this.siteCurrent = absPath;
-    this.sitePendingAnchor = anchor;
-    this.sync.setPreviewScroll(0);
-    this.previewStale = true;
-    if (panesFor(this.mode).preview) void this.render();
-  }
-
-  private scrollToSiteAnchor(id: string): void {
-    const decoded = decodeHrefPart(id);
-    if (!decoded) return;
-    const anchor = this.shadow.getElementById(decoded);
-    anchor?.scrollIntoView({ block: 'start' });
-  }
+  // The site view's sidebar, manifest, stepping and buttons live in
+  // siteNav.ts; the two header buttons are built in onOpen and handed to it.
 
   // ── editing ──
 
@@ -998,23 +832,12 @@ export class DitaView extends TextFileView implements HoverParent {
         vaultRoot,
         toResourceUrl: (rel) => adapter.getResourcePath(normalizePath(rel)),
         uiLanguage: moment.locale(),
-        current: this.siteCurrent,
-        titleCache: this.siteTitleCache,
+        current: this.site.current,
+        titleCache: this.site.titleCache,
         filter,
       });
       result = site;
-      if (site.error === undefined) {
-        this.siteMapTitle = site.title;
-        this.siteEntries = site.entries;
-        this.sitePages = site.entries
-          .filter((entry): entry is SiteNavEntry & { absPath: string } => entry.absPath !== undefined)
-          .map((entry) => ({ absPath: entry.absPath, title: entry.title }));
-        this.siteCurrent = site.current;
-        this.siteShown = site.current;
-        this.siteMapPath = file.path;
-        this.renderSiteNav();
-        this.updateSiteNavActions();
-      }
+      if (site.error === undefined) this.site.applyResult(site, file.path);
     } else if (this.isMapFile() && this.mode === 'book') {
       result = renderBookFile({
         xml: this.data,
@@ -1043,14 +866,10 @@ export class DitaView extends TextFileView implements HoverParent {
       // Mid-edit text is often not valid: keep the last good preview on screen
       // and say what is wrong, rather than blanking the page on every keystroke.
       this.showError(result.error);
-      this.sitePendingAnchor = undefined;
+      this.site.clearPendingAnchor();
       // The old page is still on screen: keep the sidebar and the previous/next
       // buttons describing it, not the page the reader asked for.
-      if (this.mode === 'site' && this.siteCurrent !== this.siteShown) {
-        this.siteCurrent = this.siteShown;
-        this.renderSiteNav();
-        this.updateSiteNavActions();
-      }
+      if (this.mode === 'site') this.site.revertToShown();
       return;
     }
     this.showError(undefined);
@@ -1065,11 +884,7 @@ export class DitaView extends TextFileView implements HoverParent {
     this.markOutlineHeading();
     // A cross-page site xref asks for an element on the page that just
     // arrived; the page has to be laid out before it can be scrolled to.
-    const anchor = this.sitePendingAnchor;
-    this.sitePendingAnchor = undefined;
-    if (anchor && this.mode === 'site') {
-      this.nextFrame(() => this.scrollToSiteAnchor(anchor));
-    }
+    this.site.applyPendingAnchor();
   }
 
   private showError(text: string | undefined): void {
@@ -1441,15 +1256,15 @@ export class DitaView extends TextFileView implements HoverParent {
     const hash = target.indexOf('#');
     const file = hash < 0 ? target : target.slice(0, hash);
     const id = hash < 0 ? '' : decodeHrefPart(target.slice(hash + 1));
-    if (file && file !== this.siteCurrent) {
-      if (this.sitePages.some((page) => page.absPath === file)) {
-        this.openSitePage(file, id || undefined);
+    if (file && file !== this.site.current) {
+      if (this.site.hasPage(file)) {
+        this.site.openPage(file, id || undefined);
         return;
       }
       if (file) this.openSource(file, id ? { id } : {});
       return;
     }
-    if (id) this.scrollToSiteAnchor(id);
+    if (id) this.site.scrollToAnchor(id);
     else this.sync.setPreviewScroll(0);
   }
 
