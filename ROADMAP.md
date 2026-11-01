@@ -108,8 +108,22 @@ values is unticked; this one follows DITA-OT (every value of one attribute).
       `display()`, which still draws it before 1.13, so `minAppVersion` stays
       1.5.0. `setDynamicTooltip()` stays in that older path, where it is what
       shows the slider value.
-- [ ] Trial through BRAT from a release tag.
-- [ ] Community plugin directory: get the submission through review.
+- [x] Trial through BRAT from a release tag. BRAT 2.2.0 in Obsidian 1.14.5
+      installed 0.2.2, frozen to that tag, with no prompt and no error; the
+      `main.js` and `styles.css` it left are byte-identical to the release's
+      assets (the manifest it rewrites is the same file minified), and the
+      plugin rendered a topic afterwards.
+- [x] Community plugin directory: get the submission through review. It is
+      listed and installable from the app's own browser at 0.2.2, already
+      downloaded by users. The automated review reports no failures: both
+      assets carry a verified release attestation, the build reproduces
+      `main.js` byte for byte, no vulnerable dependencies, no obfuscation and
+      no suspicious network patterns. What it notes is `setDynamicTooltip` as
+      deprecated (it stays for the reason given above), that the plugin
+      enumerates the vault and uses the clipboard (both through the Obsidian
+      API), and that the malware scan was not available. The entry carries the
+      directory's "not manually reviewed by Obsidian staff" line, which most
+      of the directory does since the automated review took over.
 
 ### In parallel, later
 
