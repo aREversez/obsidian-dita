@@ -28,7 +28,10 @@ starting work; update the checkboxes in the same change that finishes an item.
       and scrolls on click. The row of the current heading is highlighted (the
       caret's with the source showing, the top of the preview in reading view;
       none in a map's reading view, site view or book view, which show no
-      lines of the file); not yet tried in a running Obsidian.
+      lines of the file). Checked in Obsidian 1.14.5: a click moves the caret
+      or scrolls the preview, the row follows the caret and the scroll, the
+      Outline's auto-scroll button keeps it in view once the list overflows,
+      and the console logs no "changed shape" warning.
 - [x] Find in the preview (Ctrl/Cmd+F), in reading, split, site and book view.
 - [x] Hover preview: Ctrl/Cmd over a link to another DITA file shows it in
       Obsidian's Page Preview popover, and `![[topic.dita]]` embeds a topic (a
