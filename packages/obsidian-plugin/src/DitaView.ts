@@ -11,6 +11,7 @@ import { ditaCompletionSource } from './completionSource';
 import { ScrollSync } from './scrollSync';
 import { SiteNav } from './siteNav';
 import { ProfileController } from './profileController';
+import { HoverPreview } from './hoverPreview';
 import { HOVER_SOURCE } from './hoverSource';
 import { Debounced, debounce } from './debounce';
 import { ProblemRange, problemRanges } from './sourceDiagnostics';
@@ -32,11 +33,6 @@ export const VIEW_TYPE_DITA = 'dita-viewer-topic';
 
 /** The id the preview's links hover under, re-exported where the plugin registers it. */
 export { HOVER_SOURCE };
-
-/** Close a hover popover. `hide` is not in Obsidian's typings, so it is looked for; a popover without it just times out as usual. */
-function hidePopover(popover: HoverPopover | null): void {
-  (popover as unknown as { hide?: () => void } | null)?.hide?.();
-}
 
 /** The key a keyref/conkeyref names: everything before the first '/'. */
 /** Show or hide a header button with a class, not an inline style. */
@@ -109,10 +105,22 @@ export class DitaView extends TextFileView implements HoverParent {
   /** The frame that tells the Outline where this view is; one however often the view moves. */
   private outlineMarkFrame = 0;
   private find?: PreviewFind;
-  /** Obsidian's Page Preview keeps the popover it opens over one of this view's links here. */
-  hoverPopover: HoverPopover | null = null;
-  private hoverLink?: Element;
-  private hoverHideTimer = 0;
+  /** Page Preview over a link in the preview (hoverPreview.ts). */
+  private readonly hover: HoverPreview;
+
+  /**
+   * Obsidian's Page Preview keeps the popover it opens over one of this view's
+   * links here; the field itself is HoverPreview's, so both sides see the same
+   * one. It has to stay on the view: it is the HoverParent contract.
+   */
+  get hoverPopover(): HoverPopover | null {
+    return this.hover.hoverPopover;
+  }
+
+  set hoverPopover(popover: HoverPopover | null) {
+    this.hover.hoverPopover = popover;
+  }
+
   private readonly idReader = createIdReader();
   /** A reveal requested through setEphemeralState, applied once the text is loaded. */
   private pendingReveal?: { line?: number; col?: number; id?: string };
@@ -150,6 +158,13 @@ export class DitaView extends TextFileView implements HoverParent {
       render: () => void this.render(),
       refreshFind: () => this.find?.refresh(),
       saveLayout: () => this.app.workspace.requestSaveLayout(),
+    });
+    this.hover = new HoverPreview({
+      app: this.app,
+      hoverParent: this,
+      file: () => this.file,
+      host: () => this.host,
+      vaultRoot: () => this.vaultRoot(),
     });
   }
 
@@ -209,11 +224,8 @@ export class DitaView extends TextFileView implements HoverParent {
     });
     this.shadow.addEventListener('click', (evt) => this.onClick(evt as MouseEvent));
     this.shadow.addEventListener('contextmenu', (evt) => this.onContextMenu(evt as MouseEvent));
-    this.shadow.addEventListener('mouseover', (evt) => this.onHoverMove(evt as MouseEvent));
-    // The pointer left the preview altogether (Page Preview closes the popover itself): the next link is a new one.
-    this.host.addEventListener('mouseleave', () => {
-      this.hoverLink = undefined;
-    });
+    this.shadow.addEventListener('mouseover', (evt) => this.hover.onMove(evt as MouseEvent));
+    this.host.addEventListener('mouseleave', () => this.hover.left());
     this.shadow.addEventListener('pointermove', (evt) => this.onConrefHover(evt as PointerEvent));
     this.host.addEventListener('pointerleave', () => this.host.classList.remove('dv-conref-hot'));
     // Focusable by click, so Ctrl/Cmd+A selects the topic rather than the whole app.
@@ -313,8 +325,7 @@ export class DitaView extends TextFileView implements HoverParent {
     if (this.outlineMarkFrame) this.containerEl.win.cancelAnimationFrame(this.outlineMarkFrame);
     this.find?.destroy();
     this.find = undefined;
-    window.clearTimeout(this.hoverHideTimer);
-    hidePopover(this.hoverPopover);
+    this.hover.destroy();
     this.profiling.destroy();
     this.editor?.destroy();
   }
@@ -922,66 +933,6 @@ export class DitaView extends TextFileView implements HoverParent {
     const line = lineEl ? Number(lineEl.getAttribute('data-line')) : 0;
     const col = lineEl ? Number(lineEl.getAttribute('data-start-col') ?? 0) : 0;
     this.openSourceBeside(file, line, col);
-  }
-
-  // ── hover preview ──
-
-  /** The link under the pointer that leads to another DITA file, and the Obsidian link text for it. */
-  private hoverTargetAt(target: EventTarget | null): { el: Element; linktext: string } | undefined {
-    const vaultRoot = this.vaultRoot();
-    const el = target instanceof Element ? target : null;
-    if (!el || !vaultRoot || !this.file) return undefined;
-    const base = (a: Element): string | undefined => a.closest('[data-dita-book-file]')?.getAttribute('data-dita-book-file') ?? undefined;
-    // The first selector that matches the link names where it goes; a "#" placeholder href never does.
-    const link =
-      el.closest('a.map-tree-link[data-href]') ??
-      el.closest('[data-dita-book-xref]') ??
-      el.closest('a[data-dita-href]') ??
-      el.closest('a[href]');
-    if (!link) return undefined;
-    const href =
-      link.getAttribute('data-href') ?? link.getAttribute('data-dita-book-xref') ?? link.getAttribute('data-dita-href') ?? link.getAttribute('href') ?? '';
-    if (!href || isExternalHref(href) || href.startsWith('#')) return undefined;
-    const target_ = resolveLinkTarget(vaultRoot, this.file.path, href, base(link));
-    if (!target_) return undefined;
-    return { el: link, linktext: target_.fragment ? `${target_.path}#${target_.fragment}` : target_.path };
-  }
-
-  /**
-   * The pointer moved over the preview: over a link to another DITA file, ask
-   * Page Preview for its popover (it applies the "require Ctrl" setting).
-   *
-   * Page Preview only keeps a popover over an element in the page's own
-   * document, and a link in the preview is inside a shadow root; so the
-   * popover is anchored to the preview's host element, and what that cannot
-   * express (the pointer leaving the link for other text in the preview, or
-   * going from one link to the next) is done here.
-   */
-  private onHoverMove(evt: MouseEvent): void {
-    const link = this.hoverTargetAt(evt.target);
-    if (link?.el === this.hoverLink) return;
-    this.hoverLink = link?.el;
-    window.clearTimeout(this.hoverHideTimer);
-    if (!link || !this.file) {
-      this.hoverHideTimer = window.setTimeout(() => {
-        const popover = this.hoverPopover;
-        if (popover && !this.hoverLink && !popover.hoverEl.matches(':hover')) hidePopover(popover);
-      }, 300);
-      return;
-    }
-    // Another link: the popover for the last one goes, and so does a request
-    // still waiting for Ctrl (Page Preview drops those on the next mouseover
-    // that is not over its target, which for a shadow root is this host).
-    hidePopover(this.hoverPopover);
-    this.host.ownerDocument.body.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-    this.app.workspace.trigger('hover-link', {
-      event: evt,
-      source: HOVER_SOURCE,
-      hoverParent: this,
-      targetEl: this.host,
-      linktext: link.linktext,
-      sourcePath: this.file.path,
-    });
   }
 
   private onClick(evt: MouseEvent): void {
