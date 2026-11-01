@@ -1,6 +1,6 @@
-import { FileSystemAdapter, HoverParent, HoverPopover, Keymap, Menu, Notice, TFile, TextFileView, ViewStateResult, WorkspaceLeaf, moment, normalizePath, setIcon } from 'obsidian';
-import { dirname, isAbsolute, join, relative, resolve } from 'path';
-import { collectDiagnostics, decodeHrefPart, getKeyDefs, splitRefFragment } from '@dita-viewer/core';
+import { FileSystemAdapter, HoverParent, HoverPopover, Keymap, Menu, TFile, TextFileView, ViewStateResult, WorkspaceLeaf, moment, normalizePath, setIcon } from 'obsidian';
+import { join } from 'path';
+import { collectDiagnostics, decodeHrefPart } from '@dita-viewer/core';
 import { renderBookFile, renderDitaFile, renderDitamapFile, renderSiteFile } from './renderFile';
 import type { RenderFileResult } from './renderFile';
 import { SettingsProvider } from './settings';
@@ -12,13 +12,11 @@ import { ScrollSync } from './scrollSync';
 import { SiteNav } from './siteNav';
 import { ProfileController } from './profileController';
 import { HoverPreview } from './hoverPreview';
+import { SourceNavigation } from './sourceNavigation';
 import { HOVER_SOURCE } from './hoverSource';
 import { Debounced, debounce } from './debounce';
 import { ProblemRange, problemRanges } from './sourceDiagnostics';
-import { SourceReference, positionOfId } from './references';
 import { createIdReader } from './fileIds';
-import { badgeBox, badgeHit, conrefKindOf } from './conrefJump';
-import { outlineEntryPosition } from './mapOutline';
 import { detectEol, toLf, withEol } from './lineEndings';
 import type { Eol } from './lineEndings';
 import { isExternalHref, resolveLinkTarget } from './linkTarget';
@@ -34,27 +32,9 @@ export const VIEW_TYPE_DITA = 'dita-viewer-topic';
 /** The id the preview's links hover under, re-exported where the plugin registers it. */
 export { HOVER_SOURCE };
 
-/** The key a keyref/conkeyref names: everything before the first '/'. */
 /** Show or hide a header button with a class, not an inline style. */
 function setShown(el: HTMLElement, shown: boolean): void {
   el.toggleClass('dita-hidden', !shown);
-}
-
-function keyNameOf(value: string): string {
-  const slash = value.indexOf('/');
-  return (slash < 0 ? value : value.slice(0, slash)).trim();
-}
-
-/** The path part of an href, percent-decoded and without a query or fragment. */
-function pathOf(href: string): string {
-  const hash = href.indexOf('#');
-  return decodeHrefPart((hash < 0 ? href : href.slice(0, hash)).split('?')[0]);
-}
-
-/** The decoded #fragment of an href, or ''. */
-function fragmentOf(href: string): string {
-  const hash = href.indexOf('#');
-  return hash < 0 ? '' : decodeHrefPart(href.slice(hash + 1));
 }
 
 /**
@@ -122,10 +102,8 @@ export class DitaView extends TextFileView implements HoverParent {
   }
 
   private readonly idReader = createIdReader();
-  /** A reveal requested through setEphemeralState, applied once the text is loaded. */
-  private pendingReveal?: { line?: number; col?: number; id?: string };
-  /** The view to offer as "Back" after a reveal switched this pane to split. */
-  private revealReturnMode?: ViewMode;
+  /** The jumps into the source, and the way back from one (sourceNavigation.ts). */
+  private readonly nav: SourceNavigation;
   /** The line ending of the file on disk; the editor itself only knows \n. */
   private eol: Eol = '\n';
 
@@ -165,6 +143,31 @@ export class DitaView extends TextFileView implements HoverParent {
       file: () => this.file,
       host: () => this.host,
       vaultRoot: () => this.vaultRoot(),
+    });
+    this.nav = new SourceNavigation({
+      app: this.app,
+      file: () => this.file,
+      mode: () => this.mode,
+      vaultRoot: () => this.vaultRoot(),
+      editor: () => this.editor,
+      keys: () => this.completionEnv()?.keys(),
+      getViewData: () => this.getViewData(),
+      setMode: (mode) => this.setMode(mode),
+      showBackTo: (back) => {
+        if (!this.backAction) return;
+        const show = back !== undefined && back !== this.mode;
+        setShown(this.backAction, show);
+        if (show && back !== undefined) this.backAction.setAttribute('aria-label', `Back to ${MODE_LABELS[back]}`);
+      },
+      previewHost: () => this.host,
+      quietSync: () => this.sync?.quiet(),
+      offsetForLine: (line) => this.sync?.offsetForLine(line),
+      setPreviewScroll: (top) => this.sync?.setPreviewScroll(top),
+      nextFrame: (cb) => this.nextFrame(cb),
+      // After a split opens a topic, it shows the source, not whatever mode the pane had.
+      setSourceMode: (view) => {
+        if (view instanceof DitaView) view.setMode('source');
+      },
     });
   }
 
@@ -226,7 +229,7 @@ export class DitaView extends TextFileView implements HoverParent {
     this.shadow.addEventListener('contextmenu', (evt) => this.onContextMenu(evt as MouseEvent));
     this.shadow.addEventListener('mouseover', (evt) => this.hover.onMove(evt as MouseEvent));
     this.host.addEventListener('mouseleave', () => this.hover.left());
-    this.shadow.addEventListener('pointermove', (evt) => this.onConrefHover(evt as PointerEvent));
+    this.shadow.addEventListener('pointermove', (evt) => this.nav.onConrefHover(evt as PointerEvent));
     this.host.addEventListener('pointerleave', () => this.host.classList.remove('dv-conref-hot'));
     // Focusable by click, so Ctrl/Cmd+A selects the topic rather than the whole app.
     this.scroller.tabIndex = -1;
@@ -250,7 +253,7 @@ export class DitaView extends TextFileView implements HoverParent {
       },
       completion: ditaCompletionSource(() => this.completionEnv()),
       lint: (text) => this.lintSource(text),
-      onReference: (ref, evt) => this.openReference(ref, evt),
+      onReference: (ref, evt) => this.nav.openReference(ref, evt),
     });
 
     this.backAction = this.addAction('arrow-left', 'Back to the previous view', () => this.goBack());
@@ -275,7 +278,7 @@ export class DitaView extends TextFileView implements HoverParent {
       render: () => void this.render(),
       setPreviewScroll: (top) => this.sync.setPreviewScroll(top),
       nextFrame: (cb) => this.nextFrame(cb),
-      openSource: (absPath, place, evt) => this.openSource(absPath, place, evt),
+      openSource: (absPath, place, evt) => this.nav.openSource(absPath, place, evt),
     });
     this.siteNav.addEventListener('click', (evt) => this.site.onNavClick(evt as MouseEvent));
     this.siteNav.addEventListener('mouseover', (evt) => this.site.onNavHover(evt));
@@ -285,7 +288,7 @@ export class DitaView extends TextFileView implements HoverParent {
     this.profiling.attach();
     this.updateScheme();
     this.applyMode();
-    this.applyPendingReveal();
+    this.nav.applyPending();
   }
 
   private envCache?: { path: string; env: ReturnType<typeof createCompletionEnv> };
@@ -348,7 +351,7 @@ export class DitaView extends TextFileView implements HoverParent {
     // A leaf can be re-used for another file: a topic has no site or book view.
     if (this.file && (this.mode === 'site' || this.mode === 'book') && !this.isMapFile()) {
       this.mode = 'reading';
-      this.revealReturnMode = undefined;
+      this.nav.clearBack();
       if (this.container) this.applyMode();
     }
     // Site state describes one map. Reusing the leaf for another map starts
@@ -368,16 +371,14 @@ export class DitaView extends TextFileView implements HoverParent {
     this.editor.load(toLf(data), clear);
     this.previewStale = true;
     refreshOutlines(this.app, this.file);
-    this.applyPendingReveal();
+    this.nav.applyPending();
     // A load is not a keystroke: show it now rather than after the typing delay.
     if (panesFor(this.mode).preview) void this.render();
   }
 
   clear(): void {
     this.data = '';
-    this.pendingReveal = undefined;
-    this.revealReturnMode = undefined;
-    this.updateBackAction();
+    this.nav.reset();
     this.scheduleRender.cancel();
     this.editor?.load('', true);
     this.body?.replaceChildren();
@@ -408,7 +409,7 @@ export class DitaView extends TextFileView implements HoverParent {
     }
     // Any deliberate mode change ends the "Back to ..." offer; showSource
     // records a new one after switching to split.
-    this.revealReturnMode = undefined;
+    this.nav.clearBack();
     this.mode = mode;
     this.applyMode();
     this.app.workspace.requestSaveLayout();
@@ -436,17 +437,7 @@ export class DitaView extends TextFileView implements HoverParent {
 
   /** Where to put the caret when another view opens this file (conref jump, Ctrl/Cmd+click). */
   setEphemeralState(state: unknown): void {
-    const saved = (state ?? {}) as { ditaLine?: unknown; ditaCol?: unknown; ditaId?: unknown; line?: unknown };
-    const line = typeof saved.ditaLine === 'number' && Number.isFinite(saved.ditaLine) ? saved.ditaLine : undefined;
-    const col = typeof saved.ditaCol === 'number' && Number.isFinite(saved.ditaCol) ? saved.ditaCol : undefined;
-    const id = typeof saved.ditaId === 'string' && saved.ditaId ? saved.ditaId : undefined;
-    if (line === undefined && id === undefined) {
-      // A plain `line` is how Obsidian's own Outline (and a link to a line) asks for a position.
-      if (typeof saved.line === 'number' && Number.isFinite(saved.line)) this.goToLine(saved.line);
-      return;
-    }
-    this.pendingReveal = { line, col, id };
-    this.applyPendingReveal();
+    this.nav.request(state);
   }
 
   onPaneMenu(menu: Menu, source: string): void {
@@ -463,7 +454,7 @@ export class DitaView extends TextFileView implements HoverParent {
 
   /** The mode list, prefixed by "Back to ..." after a reveal changed the view. */
   private addModeItems(menu: Menu): void {
-    const back = this.revealReturnMode;
+    const back = this.nav.backMode;
     if (back && back !== this.mode) {
       menu.addItem((item) =>
         item
@@ -506,16 +497,13 @@ export class DitaView extends TextFileView implements HoverParent {
 
   /** Return to the view a reveal replaced, if there is one. */
   private goBack(): void {
-    if (this.revealReturnMode) this.setMode(this.revealReturnMode);
+    const back = this.nav.backMode;
+    if (back) this.setMode(back);
   }
 
   /** Show the header Back button and name its destination. */
   private updateBackAction(): void {
-    if (!this.backAction) return;
-    const back = this.revealReturnMode;
-    const show = back !== undefined && back !== this.mode;
-    setShown(this.backAction, show);
-    if (show) this.backAction.setAttribute('aria-label', `Back to ${MODE_LABELS[back]}`);
+    this.nav.updateBackAction();
   }
 
   // ── site navigation ──
@@ -825,7 +813,7 @@ export class DitaView extends TextFileView implements HoverParent {
     const el = target instanceof Element ? target.closest('[data-conref]') : null;
     if (!el) return;
     evt.preventDefault();
-    this.jumpToConref(el);
+    this.nav.jumpToConref(el);
   }
 
   private onContextMenu(evt: MouseEvent): void {
@@ -840,7 +828,7 @@ export class DitaView extends TextFileView implements HoverParent {
     const menu = new Menu();
     // After "Reveal in source" the reader can come back from the same menu
     // they right-clicked in, not only from the header button.
-    const back = this.revealReturnMode;
+    const back = this.nav.backMode;
     if (back && back !== this.mode) {
       menu.addItem((item) =>
         item
@@ -856,7 +844,7 @@ export class DitaView extends TextFileView implements HoverParent {
         item.setTitle('Open').setIcon('file-text').onClick(() => this.openRelative(href)),
       );
       menu.addItem((item) =>
-        item.setTitle('Reveal in source').setIcon('code').onClick(() => this.revealOutlineEntry(href)),
+        item.setTitle('Reveal in source').setIcon('code').onClick(() => this.nav.revealOutlineEntry(href)),
       );
       menu.addSeparator();
     } else if (bookSection) {
@@ -866,7 +854,7 @@ export class DitaView extends TextFileView implements HoverParent {
         item
           .setTitle('Reveal in source')
           .setIcon('code')
-          .onClick(() => this.revealBookSection(bookSection, target)),
+          .onClick(() => this.nav.revealBookSection(bookSection, target)),
       );
       menu.addSeparator();
     }
@@ -875,73 +863,13 @@ export class DitaView extends TextFileView implements HoverParent {
     menu.showAtMouseEvent(evt);
   }
 
-  /**
-   * "Reveal in source" for an outline row: put the caret on the topicref in
-   * this map. Rows spliced in from a referenced submap have no line in this
-   * text, so those open the topic they name in the source instead.
-   */
-  private revealOutlineEntry(href: string): void {
-    const pos = outlineEntryPosition(this.getViewData(), href);
-    if (pos) {
-      this.showSource(pos.line, pos.col);
-      return;
-    }
-    if (!this.file || !href || href.startsWith('#')) return;
-    const target = this.app.vault.getAbstractFileByPath(
-      normalizePath(join(dirname(this.file.path), decodeHrefPart(href.split('#')[0]))),
-    );
-    if (target instanceof TFile) {
-      this.openSourceBeside(target, 0, 0);
-      return;
-    }
-    new Notice('The topic for this outline entry was not found.');
-  }
-
-  /**
-   * "Reveal in source" inside book or site view: open the topic in a split
-   * beside the map, at the line of the element that was right-clicked. Those
-   * views have no outline rows, so the clicked page/section is the target.
-   */
-  /** Show a file's source in a new pane beside this one; the outline or book stays put. */
-  private openSourceBeside(file: TFile, line: number, col: number): void {
-    const leaf = this.app.workspace.getLeaf('split', 'vertical');
-    const eState = {
-      ditaLine: Number.isFinite(line) ? line : 0,
-      ditaCol: Number.isFinite(col) ? col : 0,
-    };
-    void leaf.openFile(file, { eState }).then(() => {
-      if (leaf.view instanceof DitaView) leaf.view.setMode('source');
-    });
-  }
-
-  private revealBookSection(section: Element, target: Element | null): void {
-    const abs = section.getAttribute('data-dita-book-file');
-    const vaultRoot = this.vaultRoot();
-    if (!abs || !vaultRoot) return;
-    const rel = relative(vaultRoot, abs);
-    if (rel.startsWith('..') || isAbsolute(rel)) {
-      new Notice('The topic is outside the vault.');
-      return;
-    }
-    const file = this.app.vault.getAbstractFileByPath(normalizePath(rel));
-    if (!(file instanceof TFile)) {
-      new Notice(`File not found: ${rel}`);
-      return;
-    }
-    const nearest = target?.closest('[data-line]');
-    const lineEl = nearest && section.contains(nearest) ? nearest : section.querySelector('[data-line]');
-    const line = lineEl ? Number(lineEl.getAttribute('data-line')) : 0;
-    const col = lineEl ? Number(lineEl.getAttribute('data-start-col') ?? 0) : 0;
-    this.openSourceBeside(file, line, col);
-  }
-
   private onClick(evt: MouseEvent): void {
     // A reuse badge wins over whatever it sits on: its background is the jump
     // affordance, the rest of the element still behaves normally.
-    const conref = this.conrefBadge(evt);
+    const conref = this.nav.conrefBadge(evt);
     if (conref) {
       evt.preventDefault();
-      this.jumpToConref(conref, evt);
+      this.nav.jumpToConref(conref, evt);
       return;
     }
     // An outline entry: open the topic it points at. Its href is "#"; the real
@@ -1029,7 +957,7 @@ export class DitaView extends TextFileView implements HoverParent {
       if (!section && el.getAttribute('data-dita-book-file') === file) section = el;
     });
     if (!section) {
-      if (file) this.openSource(file, {});
+      if (file) this.nav.openSource(file, {});
       return;
     }
     const anchor = id ? Array.from(section.querySelectorAll('[id]')).find((el) => el.id === id) : undefined;
@@ -1051,7 +979,7 @@ export class DitaView extends TextFileView implements HoverParent {
         this.site.openPage(file, id || undefined);
         return;
       }
-      if (file) this.openSource(file, id ? { id } : {});
+      if (file) this.nav.openSource(file, id ? { id } : {});
       return;
     }
     if (id) this.site.scrollToAnchor(id);
@@ -1072,171 +1000,8 @@ export class DitaView extends TextFileView implements HoverParent {
     this.editor.reveal(line, Number.isFinite(col) ? col : 0);
   }
 
-  // ── source navigation ──
-
-  /** Ctrl/Cmd+click in the source: open the file or the key the attribute names. */
-  private openReference(ref: SourceReference, evt: MouseEvent): void {
-    const file = this.file;
-    const vaultRoot = this.vaultRoot();
-    if (!file || !vaultRoot) return;
-    const here = join(vaultRoot, file.path);
-
-    if (ref.kind === 'key') {
-      const key = keyNameOf(ref.value);
-      const keys = this.completionEnv()?.keys();
-      // getKeyDefs indexes its WeakMap by the map instance; completionEnv hands
-      // out that same Map, read-only only so callers do not mutate the cache.
-      const def = keys ? getKeyDefs(keys as Map<string, string>)?.get(key) : undefined;
-      const href = def?.href ?? '';
-      const target = href ? pathOf(href) : '';
-      if (!def || !target) {
-        new Notice(`Key "${key}" has no file target.`);
-        return;
-      }
-      const fragment = fragmentOf(href);
-      this.openSource(resolve(def.baseDir, target), fragment ? { id: fragment } : {}, evt);
-      return;
-    }
-
-    const path = pathOf(ref.value);
-    const fragment = fragmentOf(ref.value);
-    if (!path) {
-      // "#id": a target in this file.
-      if (fragment) this.revealId(fragment);
-      return;
-    }
-    if (/^(https?:|mailto:)/i.test(ref.value)) {
-      window.open(ref.value, '_blank');
-      return;
-    }
-    this.openSource(resolve(dirname(here), path), fragment ? { id: fragment } : {}, evt);
-  }
-
-  /** Open a source position: in this view when it is this file, in another leaf otherwise. */
-  private openSource(absPath: string, place: { line?: number; col?: number; id?: string }, evt?: MouseEvent): void {
-    const vaultRoot = this.vaultRoot();
-    if (!vaultRoot) return;
-    const rel = relative(vaultRoot, absPath);
-    if (rel.startsWith('..') || isAbsolute(rel)) {
-      new Notice('The target file is outside the vault.');
-      return;
-    }
-    const path = normalizePath(rel);
-    if (path === this.file?.path) {
-      if (place.id) this.revealId(place.id);
-      else if (place.line !== undefined) this.showSource(place.line, place.col ?? 0);
-      return;
-    }
-    const target = this.app.vault.getAbstractFileByPath(path);
-    if (!(target instanceof TFile)) {
-      new Notice(`File not found: ${rel}`);
-      return;
-    }
-    // With no position to show, open the file the way any link would, in
-    // whatever mode the user has set; a position needs the source pane.
-    const eState = place.id
-      ? { ditaId: place.id }
-      : place.line !== undefined
-        ? { ditaLine: place.line, ditaCol: place.col ?? 0 }
-        : undefined;
-    void this.app.workspace.getLeaf(evt ? Keymap.isModEvent(evt) : false).openFile(target, eState ? { eState } : undefined);
-  }
-
-  /** Put the caret on the element that carries `id` in this file. */
-  private revealId(fragment: string): void {
-    // A fragment is "topicid" or "topicid/elementid"; the caret goes to the
-    // element, which is the part after the slash.
-    const id = splitRefFragment(fragment).elementId;
-    const pos = positionOfId(this.editor.getText(), id);
-    if (!pos) {
-      new Notice(`No element with id "${id}" in this file.`);
-      return;
-    }
-    this.showSource(pos.line, pos.col);
-  }
-
-  /** Bring a source position into view, opening the editor pane when only the preview was showing. */
-  private showSource(line: number, col: number): void {
-    const visible = panesFor(this.mode).editor;
-    const previous = this.mode;
-    if (!visible) {
-      this.setMode('split');
-      // Keep a way back to the outline, site or book the reader came from.
-      this.revealReturnMode = previous;
-      this.updateBackAction();
-    }
-    // Revealing scrolls the editor; without this the echo would scroll the preview back.
-    this.sync.quiet();
-    const reveal = () => {
-      this.editor.reveal(line, col);
-      this.editor.focus();
-    };
-    // A pane that was hidden needs a frame to be laid out before it can scroll.
-    if (visible) reveal();
-    else this.nextFrame(reveal);
-  }
-
-  /**
-   * Scroll to a source line the way the other panes do: put the caret there
-   * when the source is showing, otherwise move the preview without switching
-   * views. A view with nothing in its preview to scroll to (a map's outline
-   * tree) falls back to showing the source.
-   */
-  private goToLine(line: number): void {
-    if (!this.editor) return;
-    if (panesFor(this.mode).editor) {
-      this.showSource(line, 0);
-      return;
-    }
-    const offset = this.sync.offsetForLine(line);
-    if (offset === undefined) {
-      this.showSource(line, 0);
-      return;
-    }
-    this.sync.setPreviewScroll(Math.max(0, offset));
-  }
-
-  /** Apply a reveal that arrived with the file (setEphemeralState) once its text is here. */
-  private applyPendingReveal(): void {
-    const pending = this.pendingReveal;
-    if (!pending || !this.editor) return;
-    // An id is looked up in the text, so wait until the file's text is in the
-    // editor; setViewData calls this again once it is.
-    if (pending.id && this.editor.getText() === '') return;
-    this.pendingReveal = undefined;
-    if (pending.id) {
-      this.revealId(pending.id);
-      return;
-    }
-    this.showSource(pending.line ?? 0, pending.col ?? 0);
-  }
-
   private vaultRoot(): string | undefined {
     const adapter = this.app.vault.adapter;
     return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : undefined;
-  }
-
-  // ── conref jump ──
-
-  /** The reuse badge under the pointer, if any: a background cannot answer that itself. */
-  private conrefBadge(evt: MouseEvent): Element | undefined {
-    const el = (evt.target as Element | null)?.closest('[data-conref]');
-    const win = el?.ownerDocument.defaultView;
-    if (!el || !win) return undefined;
-    const box = badgeBox(el.getBoundingClientRect(), win.getComputedStyle(el), conrefKindOf(el));
-    return badgeHit(box, evt.clientX, evt.clientY) ? el : undefined;
-  }
-
-  private onConrefHover(evt: PointerEvent): void {
-    this.host.classList.toggle('dv-conref-hot', this.conrefBadge(evt) !== undefined);
-  }
-
-  /** The badge was clicked (or Enter/Space pressed on it): open the reused element's source. */
-  private jumpToConref(el: Element, evt?: MouseEvent): void {
-    const file = el.getAttribute('data-conref-file');
-    const line = Number(el.getAttribute('data-conref-line'));
-    const col = Number(el.getAttribute('data-conref-col') ?? 0);
-    if (!file || !Number.isFinite(line)) return;
-    this.openSource(file, { line, col: Number.isFinite(col) ? col : 0 }, evt);
   }
 }
