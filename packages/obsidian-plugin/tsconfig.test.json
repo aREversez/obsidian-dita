@@ -25,6 +25,7 @@
     "src/viewMode.ts",
     "src/settings.ts",
     "src/textDiff.ts",
+    "src/scrollSync.ts",
     "src/syncLines.ts",
     "src/debounce.ts",
     "src/sourceDiagnostics.ts",
