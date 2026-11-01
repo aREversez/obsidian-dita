@@ -10,7 +10,7 @@ import { MODE_ICONS, MODE_LABELS, ViewMode, modesFor, panesFor, parseViewMode, p
 import { SourceEditor, createSourceEditor } from './sourceEditor';
 import { createCompletionEnv } from './completionEnv';
 import { ditaCompletionSource } from './completionSource';
-import { EchoGuard, lineForPreviewOffset, Anchor, isOffsetVisible, previewOffsetForLine } from './syncLines';
+import { ScrollSync } from './scrollSync';
 import { Debounced, debounce } from './debounce';
 import { ProblemRange, problemRanges } from './sourceDiagnostics';
 import { SourceReference, positionOfId } from './references';
@@ -49,17 +49,6 @@ export const HOVER_SOURCE = 'dita-viewer';
 function hidePopover(popover: HoverPopover | null): void {
   (popover as unknown as { hide?: () => void } | null)?.hide?.();
 }
-
-/** After the preview is told to jump to a line, ignore the editor's own scroll echo for this long. */
-const SYNC_QUIET_MS = 250;
-
-/**
- * A heading counts as the one the preview is at once its top is this close to
- * the top of the pane. Scrolling to a row of the Outline puts the heading right
- * at the top, give or take the pixel rounding of a scroll position, and that
- * row has to be the one marked, not the row above it.
- */
-const OUTLINE_REACH_PX = 8;
 
 /** The key a keyref/conkeyref names: everything before the first '/'. */
 /** Show or hide a header button with a class, not an inline style. */
@@ -141,12 +130,8 @@ export class DitaView extends TextFileView implements HoverParent {
   private readonly scheduleRender: Debounced;
   /** The Outline pane lists headings parsed from the text, so it follows typing after a pause too. */
   private readonly scheduleOutlineRefresh: Debounced;
-  private syncFrame = 0;
-  private quietUntil = 0;
-  /** Our own scroll moves of the preview and of the editor, so their echoes are not taken for the user's. */
-  private readonly previewEcho = new EchoGuard();
-  private readonly editorEcho = new EchoGuard();
-  private syncEditorFrame = 0;
+  /** Scroll sync between the editor and the preview (scrollSync.ts). */
+  private sync!: ScrollSync;
   /** The frame that tells the Outline where this view is; one however often the view moves. */
   private outlineMarkFrame = 0;
   private find?: PreviewFind;
@@ -228,6 +213,14 @@ export class DitaView extends TextFileView implements HoverParent {
     // node visually but keeps it in the accessibility tree.
     const conrefHint = this.shadow.createDiv({ cls: 'dv-visually-hidden', text: 'Jump to the source of the reused content' });
     conrefHint.id = 'dv-conref-jump-hint';
+    this.sync = new ScrollSync({
+      scroller: this.scroller,
+      shadow: this.shadow,
+      editor: () => this.editor,
+      mode: () => this.mode,
+      nextFrame: (cb) => this.nextFrame(cb),
+      cancelFrame: (id) => this.containerEl.win.cancelAnimationFrame(id),
+    });
     this.shadow.addEventListener('click', (evt) => this.onClick(evt as MouseEvent));
     this.shadow.addEventListener('contextmenu', (evt) => this.onContextMenu(evt as MouseEvent));
     this.shadow.addEventListener('mouseover', (evt) => this.onHoverMove(evt as MouseEvent));
@@ -243,7 +236,7 @@ export class DitaView extends TextFileView implements HoverParent {
     this.scroller.addEventListener(
       'scroll',
       () => {
-        this.queueSyncToEditor();
+        this.sync.queueFromPreview();
         this.markOutlineHeading();
       },
       { passive: true },
@@ -252,9 +245,9 @@ export class DitaView extends TextFileView implements HoverParent {
     this.editor = createSourceEditor(this.editorEl, {
       text: this.data ?? '',
       onChange: (text) => this.onEdited(text),
-      onScroll: () => this.queueSyncToPreview(),
+      onScroll: () => this.sync.queueFromEditor(),
       onCursorLine: (line) => {
-        this.revealInPreview(line);
+        this.sync.revealLine(line);
         this.markOutlineHeading();
       },
       completion: ditaCompletionSource(() => this.completionEnv()),
@@ -319,8 +312,7 @@ export class DitaView extends TextFileView implements HoverParent {
   async onClose(): Promise<void> {
     this.scheduleRender.cancel();
     this.scheduleOutlineRefresh.cancel();
-    if (this.syncFrame) this.containerEl.win.cancelAnimationFrame(this.syncFrame);
-    if (this.syncEditorFrame) this.containerEl.win.cancelAnimationFrame(this.syncEditorFrame);
+    this.sync?.destroy();
     if (this.outlineMarkFrame) this.containerEl.win.cancelAnimationFrame(this.outlineMarkFrame);
     this.find?.destroy();
     this.find = undefined;
@@ -405,7 +397,7 @@ export class DitaView extends TextFileView implements HoverParent {
     // when the source is unchanged.
     if (previewKindFor(mode) !== previewKindFor(this.mode)) {
       this.previewStale = true;
-      if (mode === 'site') this.setPreviewScroll(0);
+      if (mode === 'site') this.sync?.setPreviewScroll(0);
     }
     // Any deliberate mode change ends the "Back to ..." offer; showSource
     // records a new one after switching to split.
@@ -509,7 +501,7 @@ export class DitaView extends TextFileView implements HoverParent {
       // CodeMirror cannot measure while hidden; once visible, measure and line up the preview.
       this.nextFrame(() => {
         this.editor.remeasure();
-        if (this.mode === 'split') this.syncPreviewToEditor();
+        if (this.mode === 'split') this.sync.syncNow();
       });
     }
   }
@@ -685,12 +677,12 @@ export class DitaView extends TextFileView implements HoverParent {
     if (this.mode !== 'site' || !absPath) return;
     if (absPath === this.siteCurrent) {
       if (anchor) this.scrollToSiteAnchor(anchor);
-      else this.setPreviewScroll(0);
+      else this.sync.setPreviewScroll(0);
       return;
     }
     this.siteCurrent = absPath;
     this.sitePendingAnchor = anchor;
-    this.setPreviewScroll(0);
+    this.sync.setPreviewScroll(0);
     this.previewStale = true;
     if (panesFor(this.mode).preview) void this.render();
   }
@@ -1068,7 +1060,7 @@ export class DitaView extends TextFileView implements HoverParent {
     this.find?.refresh();
     this.previewStale = false;
     this.updateScheme();
-    this.setPreviewScroll(scrollTop);
+    this.sync.setPreviewScroll(scrollTop);
     // The page changed under the same scroll position.
     this.markOutlineHeading();
     // A cross-page site xref asks for an element on the page that just
@@ -1090,88 +1082,6 @@ export class DitaView extends TextFileView implements HoverParent {
     this.errorEl.show();
   }
 
-  // ── scroll and cursor sync (source drives preview) ──
-
-  private measureAnchors(): Anchor[] {
-    const base = this.scroller.getBoundingClientRect().top - this.scroller.scrollTop;
-    const anchors: Anchor[] = [];
-    this.shadow.querySelectorAll('[data-line]').forEach((el) => {
-      // A line the conditional-processing filter hides has no position to follow.
-      if (el.getClientRects().length === 0) return;
-      anchors.push({ line: Number(el.getAttribute('data-line')), top: el.getBoundingClientRect().top - base });
-    });
-    return anchors;
-  }
-
-  private queueSyncToPreview(): void {
-    if (this.mode !== 'split' || this.syncFrame || performance.now() < this.quietUntil) return;
-    if (this.editorEcho.isEcho(this.editor.view.scrollDOM.scrollTop)) return;
-    this.syncFrame = this.nextFrame(() => {
-      this.syncFrame = 0;
-      this.syncPreviewToEditor();
-    });
-  }
-
-  private syncPreviewToEditor(): void {
-    if (this.mode !== 'split') return;
-    const sc = this.editor.view.scrollDOM;
-    // The ends line up exactly, whatever the two documents' proportions.
-    if (sc.scrollTop <= 0) {
-      this.setPreviewScroll(0);
-      return;
-    }
-    if (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 1) {
-      this.setPreviewScroll(this.scroller.scrollHeight);
-      return;
-    }
-    const offset = previewOffsetForLine(this.measureAnchors(), this.editor.topLine());
-    if (offset !== undefined) this.setPreviewScroll(offset);
-  }
-
-  /** Move the preview by code, noting where it ends up so its scroll event is known for an echo. */
-  private setPreviewScroll(top: number): void {
-    this.scroller.scrollTop = top;
-    this.previewEcho.expect(this.scroller.scrollTop);
-  }
-
-  /** The preview was scrolled (by the user): bring the editor to the same place. */
-  private queueSyncToEditor(): void {
-    if (this.mode !== 'split' || this.syncEditorFrame || performance.now() < this.quietUntil) return;
-    if (this.previewEcho.isEcho(this.scroller.scrollTop)) return;
-    this.syncEditorFrame = this.nextFrame(() => {
-      this.syncEditorFrame = 0;
-      this.syncEditorToPreview();
-    });
-  }
-
-  private syncEditorToPreview(): void {
-    if (this.mode !== 'split') return;
-    const sc = this.scroller;
-    const ed = this.editor.view.scrollDOM;
-    if (sc.scrollTop <= 0) {
-      ed.scrollTop = 0;
-    } else if (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 1) {
-      // The ends line up exactly, as they do when the editor leads.
-      ed.scrollTop = ed.scrollHeight;
-    } else {
-      const line = lineForPreviewOffset(this.measureAnchors(), sc.scrollTop);
-      if (line === undefined) return;
-      this.editor.scrollToTopLine(line);
-    }
-    this.editorEcho.expect(ed.scrollTop);
-  }
-
-  /** The caret moved: bring its line into the preview if it is out of sight. */
-  private revealInPreview(line: number): void {
-    if (this.mode !== 'split' || performance.now() < this.quietUntil) return;
-    const offset = previewOffsetForLine(this.measureAnchors(), line);
-    if (offset === undefined) return;
-    const h = this.scroller.clientHeight;
-    if (!isOffsetVisible(offset, this.scroller.scrollTop, h, h * 0.2)) {
-      this.setPreviewScroll(Math.max(0, offset - h * 0.3));
-    }
-  }
-
   // ── the Outline pane's current heading ──
 
   /**
@@ -1187,8 +1097,7 @@ export class DitaView extends TextFileView implements HoverParent {
       return state.doc.lineAt(state.selection.main.head).number - 1;
     }
     if (this.mode !== 'reading') return undefined;
-    const line = lineForPreviewOffset(this.measureAnchors(), this.scroller.scrollTop + OUTLINE_REACH_PX);
-    return line === undefined ? undefined : Math.floor(line);
+    return this.sync.lineAtPreviewTop();
   }
 
   /** Tell the Outline panes showing this file which heading this view is at, on the next frame. */
@@ -1541,7 +1450,7 @@ export class DitaView extends TextFileView implements HoverParent {
       return;
     }
     if (id) this.scrollToSiteAnchor(id);
-    else this.setPreviewScroll(0);
+    else this.sync.setPreviewScroll(0);
   }
 
   /** Side by side, clicking the preview puts the caret at that element's source. */
@@ -1554,7 +1463,7 @@ export class DitaView extends TextFileView implements HoverParent {
     const col = Number(el.getAttribute('data-start-col') ?? 0);
     if (!Number.isFinite(line)) return;
     // Revealing scrolls the editor; without this the echo would scroll the preview back.
-    this.quietUntil = performance.now() + SYNC_QUIET_MS;
+    this.sync.quiet();
     this.editor.reveal(line, Number.isFinite(col) ? col : 0);
   }
 
@@ -1652,7 +1561,7 @@ export class DitaView extends TextFileView implements HoverParent {
       this.updateBackAction();
     }
     // Revealing scrolls the editor; without this the echo would scroll the preview back.
-    this.quietUntil = performance.now() + SYNC_QUIET_MS;
+    this.sync.quiet();
     const reveal = () => {
       this.editor.reveal(line, col);
       this.editor.focus();
@@ -1674,12 +1583,12 @@ export class DitaView extends TextFileView implements HoverParent {
       this.showSource(line, 0);
       return;
     }
-    const offset = previewOffsetForLine(this.measureAnchors(), line);
+    const offset = this.sync.offsetForLine(line);
     if (offset === undefined) {
       this.showSource(line, 0);
       return;
     }
-    this.setPreviewScroll(Math.max(0, offset));
+    this.sync.setPreviewScroll(Math.max(0, offset));
   }
 
   /** Apply a reveal that arrived with the file (setEphemeralState) once its text is here. */
