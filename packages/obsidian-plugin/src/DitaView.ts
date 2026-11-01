@@ -1,6 +1,6 @@
-import { FileSystemAdapter, HoverParent, HoverPopover, Keymap, Menu, TFile, TextFileView, ViewStateResult, WorkspaceLeaf, moment, normalizePath, setIcon } from 'obsidian';
+import { FileSystemAdapter, HoverParent, HoverPopover, Menu, TextFileView, ViewStateResult, WorkspaceLeaf, moment, normalizePath, setIcon } from 'obsidian';
 import { join } from 'path';
-import { collectDiagnostics, decodeHrefPart } from '@dita-viewer/core';
+import { collectDiagnostics } from '@dita-viewer/core';
 import { renderBookFile, renderDitaFile, renderDitamapFile, renderSiteFile } from './renderFile';
 import type { RenderFileResult } from './renderFile';
 import { SettingsProvider } from './settings';
@@ -13,16 +13,15 @@ import { SiteNav } from './siteNav';
 import { ProfileController } from './profileController';
 import { HoverPreview } from './hoverPreview';
 import { SourceNavigation } from './sourceNavigation';
+import { PreviewInteraction } from './previewInteraction';
 import { HOVER_SOURCE } from './hoverSource';
 import { Debounced, debounce } from './debounce';
 import { ProblemRange, problemRanges } from './sourceDiagnostics';
 import { createIdReader } from './fileIds';
 import { detectEol, toLf, withEol } from './lineEndings';
 import type { Eol } from './lineEndings';
-import { isExternalHref, resolveLinkTarget } from './linkTarget';
 import { markActiveHeading, refreshOutlines } from './outlinePatch';
 import { getSheets } from './previewSheets';
-import { PreviewFind } from './previewFind';
 import { StructureSpec, WrapSpec } from './snippetsData';
 import { insertStructure, wrapSelection } from './snippets';
 import { setRenderedHtml } from './renderedHtml';
@@ -84,7 +83,6 @@ export class DitaView extends TextFileView implements HoverParent {
   private sync!: ScrollSync;
   /** The frame that tells the Outline where this view is; one however often the view moves. */
   private outlineMarkFrame = 0;
-  private find?: PreviewFind;
   /** Page Preview over a link in the preview (hoverPreview.ts). */
   private readonly hover: HoverPreview;
 
@@ -104,6 +102,8 @@ export class DitaView extends TextFileView implements HoverParent {
   private readonly idReader = createIdReader();
   /** The jumps into the source, and the way back from one (sourceNavigation.ts). */
   private readonly nav: SourceNavigation;
+  /** Clicks, keys and the find bar on the rendered page (previewInteraction.ts). */
+  private readonly interact: PreviewInteraction;
   /** The line ending of the file on disk; the editor itself only knows \n. */
   private eol: Eol = '\n';
 
@@ -134,7 +134,7 @@ export class DitaView extends TextFileView implements HoverParent {
         this.previewStale = true;
       },
       render: () => void this.render(),
-      refreshFind: () => this.find?.refresh(),
+      refreshFind: () => this.interact.refreshFind(),
       saveLayout: () => this.app.workspace.requestSaveLayout(),
     });
     this.hover = new HoverPreview({
@@ -168,6 +168,24 @@ export class DitaView extends TextFileView implements HoverParent {
       setSourceMode: (view) => {
         if (view instanceof DitaView) view.setMode('source');
       },
+    });
+    this.interact = new PreviewInteraction({
+      app: this.app,
+      file: () => this.file,
+      mode: () => this.mode,
+      vaultRoot: () => this.vaultRoot(),
+      body: () => this.body,
+      shadow: () => this.shadow,
+      host: () => this.host,
+      container: () => this.container,
+      scroller: () => this.scroller,
+      editor: () => this.editor,
+      site: () => this.site,
+      nav: () => this.nav,
+      setPreviewScroll: (top) => this.sync?.setPreviewScroll(top),
+      quietSync: () => this.sync?.quiet(),
+      goBack: () => this.goBack(),
+      backMode: () => this.nav.backMode,
     });
   }
 
@@ -225,15 +243,15 @@ export class DitaView extends TextFileView implements HoverParent {
       nextFrame: (cb) => this.nextFrame(cb),
       cancelFrame: (id) => this.containerEl.win.cancelAnimationFrame(id),
     });
-    this.shadow.addEventListener('click', (evt) => this.onClick(evt as MouseEvent));
-    this.shadow.addEventListener('contextmenu', (evt) => this.onContextMenu(evt as MouseEvent));
+    this.shadow.addEventListener('click', (evt) => this.interact.onClick(evt as MouseEvent));
+    this.shadow.addEventListener('contextmenu', (evt) => this.interact.onContextMenu(evt as MouseEvent));
     this.shadow.addEventListener('mouseover', (evt) => this.hover.onMove(evt as MouseEvent));
     this.host.addEventListener('mouseleave', () => this.hover.left());
     this.shadow.addEventListener('pointermove', (evt) => this.nav.onConrefHover(evt as PointerEvent));
     this.host.addEventListener('pointerleave', () => this.host.classList.remove('dv-conref-hot'));
     // Focusable by click, so Ctrl/Cmd+A selects the topic rather than the whole app.
     this.scroller.tabIndex = -1;
-    this.scroller.addEventListener('keydown', (evt) => this.onPreviewKey(evt));
+    this.scroller.addEventListener('keydown', (evt) => this.interact.onKey(evt));
     this.scroller.addEventListener(
       'scroll',
       () => {
@@ -326,8 +344,7 @@ export class DitaView extends TextFileView implements HoverParent {
     this.scheduleOutlineRefresh.cancel();
     this.sync?.destroy();
     if (this.outlineMarkFrame) this.containerEl.win.cancelAnimationFrame(this.outlineMarkFrame);
-    this.find?.destroy();
-    this.find = undefined;
+    this.interact.destroy();
     this.hover.destroy();
     this.profiling.destroy();
     this.editor?.destroy();
@@ -481,7 +498,7 @@ export class DitaView extends TextFileView implements HoverParent {
     this.updateBackAction();
     // Conditional processing acts on the preview; with only the source showing there is nothing to filter.
     this.profiling.setVisible(panes.preview);
-    if (!panes.preview) this.find?.close();
+    if (!panes.preview) this.interact.closeFind();
     // Typing while only the source was showing left the preview behind.
     if (panes.preview && this.previewStale && this.file) void this.render();
     // What the Outline follows (the caret, or the preview) depends on the mode.
@@ -714,7 +731,7 @@ export class DitaView extends TextFileView implements HoverParent {
     this.showError(undefined);
     setRenderedHtml(this.body, result.html);
     this.profiling.applyFilter();
-    this.find?.refresh();
+    this.interact.refreshFind();
     this.previewStale = false;
     this.updateScheme();
     this.sync.setPreviewScroll(scrollTop);
@@ -764,11 +781,8 @@ export class DitaView extends TextFileView implements HoverParent {
 
   // ── preview interaction ──
 
-  /** The selection inside the preview. Chromium keeps selections within a shadow root on the root itself. */
-  private previewSelection(): Selection | null {
-    const root = this.shadow as unknown as { getSelection?: () => Selection | null };
-    return root.getSelection?.() ?? this.host.ownerDocument.getSelection();
-  }
+  // Clicks, keys, the context menu and the find bar live in
+  // previewInteraction.ts; Obsidian calls this on any view that has it.
 
   /**
    * Obsidian's Find command (Ctrl/Cmd+F) calls this on any view that has it.
@@ -776,228 +790,7 @@ export class DitaView extends TextFileView implements HoverParent {
    * editor's own search opens instead.
    */
   showSearch(): void {
-    if (!panesFor(this.mode).preview) {
-      this.editor.openSearch();
-      return;
-    }
-    this.find ??= new PreviewFind({
-      shadow: this.shadow,
-      body: this.body,
-      barParent: this.container,
-      selectedText: () => this.previewSelection()?.toString() ?? '',
-      onClose: () => this.scroller.focus({ preventScroll: true }),
-    });
-    this.find.open();
-  }
-
-  private selectAllInPreview(): void {
-    const sel = this.previewSelection();
-    sel?.selectAllChildren(this.body);
-  }
-
-  private async copySelection(): Promise<void> {
-    const text = this.previewSelection()?.toString() ?? '';
-    if (text) await navigator.clipboard.writeText(text);
-  }
-
-  private onPreviewKey(evt: KeyboardEvent): void {
-    if ((evt.ctrlKey || evt.metaKey) && !evt.altKey && !evt.shiftKey && evt.key.toLowerCase() === 'a') {
-      evt.preventDefault();
-      this.selectAllInPreview();
-      return;
-    }
-    if (evt.key !== 'Enter' && evt.key !== ' ' && evt.key !== 'Spacebar') return;
-    // The listener sits outside the shadow root, so the target is retargeted
-    // to the host; composedPath()[0] is the element the reader focused.
-    const target = evt.composedPath()[0];
-    const el = target instanceof Element ? target.closest('[data-conref]') : null;
-    if (!el) return;
-    evt.preventDefault();
-    this.nav.jumpToConref(el);
-  }
-
-  private onContextMenu(evt: MouseEvent): void {
-    evt.preventDefault();
-    const target = evt.target as Element | null;
-    const entry = target?.closest('a.map-tree-link[data-href]');
-    const bookSection =
-      this.mode === 'book' || this.mode === 'site'
-        ? target?.closest('[data-dita-book-file]')
-        : null;
-    const hasSelection = (this.previewSelection()?.toString() ?? '') !== '';
-    const menu = new Menu();
-    // After "Reveal in source" the reader can come back from the same menu
-    // they right-clicked in, not only from the header button.
-    const back = this.nav.backMode;
-    if (back && back !== this.mode) {
-      menu.addItem((item) =>
-        item
-          .setTitle(`Back to ${MODE_LABELS[back]}`)
-          .setIcon('arrow-left')
-          .onClick(() => this.goBack()),
-      );
-      menu.addSeparator();
-    }
-    if (entry) {
-      const href = entry.getAttribute('data-href') ?? '';
-      menu.addItem((item) =>
-        item.setTitle('Open').setIcon('file-text').onClick(() => this.openRelative(href)),
-      );
-      menu.addItem((item) =>
-        item.setTitle('Reveal in source').setIcon('code').onClick(() => this.nav.revealOutlineEntry(href)),
-      );
-      menu.addSeparator();
-    } else if (bookSection) {
-      // Book/site views have no outline rows; reveal the topic the reader
-      // right-clicked.
-      menu.addItem((item) =>
-        item
-          .setTitle('Reveal in source')
-          .setIcon('code')
-          .onClick(() => this.nav.revealBookSection(bookSection, target)),
-      );
-      menu.addSeparator();
-    }
-    menu.addItem((item) => item.setTitle('Copy').setIcon('copy').setDisabled(!hasSelection).onClick(() => void this.copySelection()));
-    menu.addItem((item) => item.setTitle('Select all').setIcon('text-select').onClick(() => this.selectAllInPreview()));
-    menu.showAtMouseEvent(evt);
-  }
-
-  private onClick(evt: MouseEvent): void {
-    // A reuse badge wins over whatever it sits on: its background is the jump
-    // affordance, the rest of the element still behaves normally.
-    const conref = this.nav.conrefBadge(evt);
-    if (conref) {
-      evt.preventDefault();
-      this.nav.jumpToConref(conref, evt);
-      return;
-    }
-    // An outline entry: open the topic it points at. Its href is "#"; the real
-    // target is in data-href, relative to the map.
-    const entry = (evt.target as Element | null)?.closest('a.map-tree-link[data-href]');
-    if (entry && this.file) {
-      evt.preventDefault();
-      this.openRelative(entry.getAttribute('data-href') ?? '', evt);
-      return;
-    }
-    // A cross-file xref inside the book: scroll to a section on this page.
-    // Inside the site, switch to the target topic's page first.
-    const bookRef = (evt.target as Element | null)?.closest('[data-dita-book-xref]');
-    if (bookRef) {
-      evt.preventDefault();
-      const target = bookRef.getAttribute('data-dita-book-xref') ?? '';
-      if (this.mode === 'site') this.jumpInSite(target);
-      else this.jumpInBook(target);
-      return;
-    }
-    // A cross-file xref or related link in the single-topic preview: its href
-    // is only the "#" placeholder, the real target is in data-dita-href.
-    const linked = (evt.target as Element | null)?.closest('a[data-dita-href]');
-    if (linked && this.file) {
-      evt.preventDefault();
-      const target = linked.getAttribute('data-dita-href') ?? '';
-      if (isExternalHref(target)) window.open(target, '_blank');
-      else if (target && !target.startsWith('#')) {
-        const section = linked.closest('[data-dita-book-file]');
-        this.openRelative(target, evt, section?.getAttribute('data-dita-book-file') ?? undefined);
-      }
-      return;
-    }
-    const a = (evt.target as Element | null)?.closest('a[href]');
-    if (!a || !this.file) {
-      this.jumpToSource(evt);
-      return;
-    }
-    const href = a.getAttribute('href') ?? '';
-    evt.preventDefault();
-
-    if (isExternalHref(href)) {
-      window.open(href, '_blank');
-      return;
-    }
-    if (href.startsWith('#')) {
-      this.shadow.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView({ block: 'start' });
-      return;
-    }
-    // A plain link inside a book topic is relative to that topic, not to the
-    // map; the section says which topic it is.
-    const section = a.closest('[data-dita-book-file]');
-    this.openRelative(href, evt, section?.getAttribute('data-dita-book-file') ?? undefined);
-  }
-
-  /**
-   * Open a file named by a path relative to this document, in a new tab when
-   * Ctrl/Cmd is held. `baseAbsPath` overrides the base (a book/site topic,
-   * whose links are relative to the topic file rather than to the map).
-   */
-  private openRelative(href: string, evt?: MouseEvent, baseAbsPath?: string): void {
-    const vaultRoot = this.vaultRoot();
-    if (!vaultRoot || !this.file) return;
-    const link = resolveLinkTarget(vaultRoot, this.file.path, href, baseAbsPath);
-    if (!link) return;
-    const target = this.app.vault.getAbstractFileByPath(normalizePath(link.path));
-    if (target instanceof TFile) {
-      void this.app.workspace.getLeaf(evt ? Keymap.isModEvent(evt) : false).openFile(target);
-    }
-  }
-
-  /**
-   * Follow a cross-file xref rendered inside the book: scroll to the topic
-   * section whose data-dita-book-file matches, then to the element id in it.
-   * The link is only rendered for book members, so a miss means the page is
-   * stale (the map changed since this HTML was made) -- open the topic.
-   */
-  private jumpInBook(target: string): void {
-    if (!target) return;
-    const hash = target.indexOf('#');
-    const file = hash < 0 ? target : target.slice(0, hash);
-    const id = hash < 0 ? '' : decodeHrefPart(target.slice(hash + 1));
-    let section: Element | undefined;
-    this.shadow.querySelectorAll('[data-dita-book-file]').forEach((el) => {
-      if (!section && el.getAttribute('data-dita-book-file') === file) section = el;
-    });
-    if (!section) {
-      if (file) this.nav.openSource(file, {});
-      return;
-    }
-    const anchor = id ? Array.from(section.querySelectorAll('[id]')).find((el) => el.id === id) : undefined;
-    (anchor ?? section).scrollIntoView({ block: 'start' });
-  }
-
-  /**
-   * Follow a cross-file xref rendered inside the site: switch to the target
-   * page, then scroll to its element id. A target that is not in the sidebar
-   * means the manifest is stale -- open the topic instead.
-   */
-  private jumpInSite(target: string): void {
-    if (!target) return;
-    const hash = target.indexOf('#');
-    const file = hash < 0 ? target : target.slice(0, hash);
-    const id = hash < 0 ? '' : decodeHrefPart(target.slice(hash + 1));
-    if (file && file !== this.site.current) {
-      if (this.site.hasPage(file)) {
-        this.site.openPage(file, id || undefined);
-        return;
-      }
-      if (file) this.nav.openSource(file, id ? { id } : {});
-      return;
-    }
-    if (id) this.site.scrollToAnchor(id);
-    else this.sync.setPreviewScroll(0);
-  }
-
-  /** Side by side, clicking the preview puts the caret at that element's source. */
-  private jumpToSource(evt: MouseEvent): void {
-    if (this.mode !== 'split') return;
-    if (this.host.ownerDocument.getSelection()?.isCollapsed === false) return; // the user is selecting text
-    const el = (evt.target as Element | null)?.closest('[data-line]');
-    if (!el) return;
-    const line = Number(el.getAttribute('data-line'));
-    const col = Number(el.getAttribute('data-start-col') ?? 0);
-    if (!Number.isFinite(line)) return;
-    // Revealing scrolls the editor; without this the echo would scroll the preview back.
-    this.sync.quiet();
-    this.editor.reveal(line, Number.isFinite(col) ? col : 0);
+    this.interact.showSearch();
   }
 
   private vaultRoot(): string | undefined {
