@@ -1,7 +1,6 @@
 import { FileSystemAdapter, HoverParent, HoverPopover, Keymap, Menu, Notice, TFile, TextFileView, ViewStateResult, WorkspaceLeaf, moment, normalizePath, setIcon } from 'obsidian';
 import { dirname, isAbsolute, join, relative, resolve } from 'path';
-import { collectDiagnostics, decodeHrefPart, getKeyDefs, isExcluded, profileGroups, profileValuesOfKeys, splitRefFragment } from '@dita-viewer/core';
-import type { Ditaval, ProfileFilter, ProfileGroup } from '@dita-viewer/core';
+import { collectDiagnostics, decodeHrefPart, getKeyDefs, splitRefFragment } from '@dita-viewer/core';
 import { renderBookFile, renderDitaFile, renderDitamapFile, renderSiteFile } from './renderFile';
 import type { RenderFileResult } from './renderFile';
 import { SettingsProvider } from './settings';
@@ -11,6 +10,7 @@ import { createCompletionEnv } from './completionEnv';
 import { ditaCompletionSource } from './completionSource';
 import { ScrollSync } from './scrollSync';
 import { SiteNav } from './siteNav';
+import { ProfileController } from './profileController';
 import { HOVER_SOURCE } from './hoverSource';
 import { Debounced, debounce } from './debounce';
 import { ProblemRange, problemRanges } from './sourceDiagnostics';
@@ -26,20 +26,7 @@ import { getSheets } from './previewSheets';
 import { PreviewFind } from './previewFind';
 import { StructureSpec, WrapSpec } from './snippetsData';
 import { insertStructure, wrapSelection } from './snippets';
-import {
-  DEFAULT_PROFILE_STATE,
-  ProfileState,
-  buildFilter,
-  isDefaultProfileState,
-  listDitavalFiles,
-  loadDitaval,
-  normalizeProfileState,
-  resolveDitavalPath,
-} from './profileState';
 import { setRenderedHtml } from './renderedHtml';
-import { ProfilePanel } from './profilePanel';
-import type { ProfilePanelHost } from './profilePanel';
-import { DitavalPicker } from './pickers';
 
 export const VIEW_TYPE_DITA = 'dita-viewer-topic';
 
@@ -135,21 +122,35 @@ export class DitaView extends TextFileView implements HoverParent {
   private eol: Eol = '\n';
 
   // ── conditional processing ──
-  private profile: ProfileState = { ...DEFAULT_PROFILE_STATE, hidden: [] };
-  /** The chosen .ditaval as parsed; undefined when none is chosen or it did not read cleanly. */
-  private ditaval?: Ditaval;
-  private ditavalAbs?: string;
-  private ditavalError?: string;
-  /** Elements the filter hides in the page on screen. */
-  private filteredCount = 0;
+  /** The pane's .ditaval, hidden values, panel and filter (profileController.ts). */
+  private readonly profiling: ProfileController;
   private profileAction!: HTMLElement;
-  private profilePanel?: ProfilePanel;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: SettingsProvider) {
     super(leaf);
     this.mode = plugin.settings.defaultMode;
     this.scheduleRender = debounce(() => void this.render(), () => this.plugin.settings.previewDelayMs);
     this.scheduleOutlineRefresh = debounce(() => refreshOutlines(this.app, this.file), () => this.plugin.settings.previewDelayMs);
+    this.profiling = new ProfileController({
+      app: this.app,
+      body: () => this.body,
+      container: () => this.container,
+      action: () => this.profileAction,
+      // The header button toggles the panel itself, and the DITAVAL picker is a
+      // modal: clicking in either must not count as clicking away.
+      isIgnoredClick: (target) =>
+        this.profileAction?.contains(target) || (target.instanceOf(Element) && target.closest('.modal-container') !== null),
+      isMapFile: () => this.isMapFile(),
+      mode: () => this.mode,
+      addDependency: (absPath) => this.dependencies.add(absPath),
+      removeDependency: (absPath) => this.dependencies.delete(absPath),
+      markStale: () => {
+        this.previewStale = true;
+      },
+      render: () => void this.render(),
+      refreshFind: () => this.find?.refresh(),
+      saveLayout: () => this.app.workspace.requestSaveLayout(),
+    });
   }
 
   getViewType(): string {
@@ -269,16 +270,7 @@ export class DitaView extends TextFileView implements HoverParent {
     this.modeAction = this.addAction(MODE_ICONS[this.mode], 'View mode', (evt) => this.showModeMenu(evt));
     this.profileAction = this.addAction('filter', 'Conditional processing', () => this.toggleProfilePanel());
     this.profileAction.addClass('dita-profile-action');
-    this.profilePanel = new ProfilePanel(
-      this.container,
-      this.profileHost(),
-      // The header button toggles the panel itself, and the DITAVAL picker is a
-      // modal: clicking in either must not count as clicking away.
-      (target) => this.profileAction.contains(target) || (target.instanceOf(Element) && target.closest('.modal-container') !== null),
-      () => this.updateProfileAction(),
-    );
-    this.reloadDitaval();
-    this.updateProfileAction();
+    this.profiling.attach();
     this.updateScheme();
     this.applyMode();
     this.applyPendingReveal();
@@ -323,7 +315,7 @@ export class DitaView extends TextFileView implements HoverParent {
     this.find = undefined;
     window.clearTimeout(this.hoverHideTimer);
     hidePopover(this.hoverPopover);
-    this.profilePanel?.destroy();
+    this.profiling.destroy();
     this.editor?.destroy();
   }
 
@@ -378,8 +370,7 @@ export class DitaView extends TextFileView implements HoverParent {
     this.scheduleRender.cancel();
     this.editor?.load('', true);
     this.body?.replaceChildren();
-    this.filteredCount = 0;
-    this.updateProfileAction();
+    this.profiling.reset();
     this.site?.reset();
     this.dependencies.clear();
     this.lintDependencies.clear();
@@ -419,7 +410,7 @@ export class DitaView extends TextFileView implements HoverParent {
   getState(): Record<string, unknown> {
     const state: Record<string, unknown> = { ...super.getState(), mode: this.mode };
     // A pane with no filter saves nothing extra.
-    if (!isDefaultProfileState(this.profile)) state.profiling = this.profile;
+    if (!this.profiling.isDefault) state.profiling = this.profiling.state;
     return state;
   }
 
@@ -427,11 +418,7 @@ export class DitaView extends TextFileView implements HoverParent {
     const saved = state as { mode?: unknown; profiling?: unknown } | null;
     this.mode = parseViewMode(saved?.mode, this.mode);
     // Like the mode, the filter stays with the pane when the state names none.
-    if (saved && 'profiling' in saved) {
-      this.profile = normalizeProfileState(saved.profiling);
-      this.reloadDitaval();
-      if (this.container) this.applyProfileState();
-    }
+    if (saved && 'profiling' in saved) this.profiling.restore(saved.profiling);
     if (this.container) this.applyMode();
     await super.setState(state, result);
   }
@@ -491,11 +478,8 @@ export class DitaView extends TextFileView implements HoverParent {
     this.site?.updateActions();
     this.updateBackAction();
     // Conditional processing acts on the preview; with only the source showing there is nothing to filter.
-    setShown(this.profileAction, panes.preview);
-    if (!panes.preview) {
-      this.profilePanel?.close();
-      this.find?.close();
-    }
+    this.profiling.setVisible(panes.preview);
+    if (!panes.preview) this.find?.close();
     // Typing while only the source was showing left the preview behind.
     if (panes.preview && this.previewStale && this.file) void this.render();
     // What the Outline follows (the caret, or the preview) depends on the mode.
@@ -610,7 +594,7 @@ export class DitaView extends TextFileView implements HoverParent {
     refreshOutlines(this.app, this.file);
     if (panesFor(this.mode).preview) await this.render();
     // The .ditaval or the page's values may be what changed.
-    this.profilePanel?.refresh();
+    this.profiling.refreshPanel();
   }
 
   /** The theme's light/dark flag, for the few rules that cannot be derived from variables. */
@@ -628,165 +612,20 @@ export class DitaView extends TextFileView implements HoverParent {
   }
 
   hasDitaval(): boolean {
-    return this.profile.ditaval !== undefined;
+    return this.profiling.hasDitaval();
   }
 
   toggleProfilePanel(): void {
-    if (!this.profilePanel) return;
-    if (this.profilePanel.isOpen) this.profilePanel.close();
-    else this.profilePanel.open();
+    this.profiling.togglePanel();
   }
 
   /** Pick a .ditaval from the vault and apply it to this pane. */
   chooseDitaval(): void {
-    const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof FileSystemAdapter)) {
-      new Notice('DITA Viewer needs a vault stored on the local file system.');
-      return;
-    }
-    const files = listDitavalFiles(adapter.getBasePath());
-    if (files.length === 0) {
-      new Notice('No .ditaval files were found in this vault.');
-      return;
-    }
-    new DitavalPicker(this.app, files, (path) => this.setDitaval(path)).open();
+    this.profiling.choose();
   }
 
   clearDitaval(): void {
-    this.setDitaval(undefined);
-  }
-
-  private setDitaval(path: string | undefined): void {
-    this.profile = { ...this.profile, ditaval: path };
-    if (path === undefined) delete this.profile.ditaval;
-    this.reloadDitaval();
-    if (this.ditavalError) new Notice(this.ditavalError);
-    this.onProfileChanged();
-    this.profilePanel?.refresh();
-  }
-
-  /** Read the chosen .ditaval from disk; an unreadable or malformed one is not applied. */
-  private reloadDitaval(): void {
-    const previous = this.ditavalAbs;
-    this.ditaval = undefined;
-    this.ditavalAbs = undefined;
-    this.ditavalError = undefined;
-    const rel = this.profile.ditaval;
-    const adapter = this.app?.vault.adapter;
-    if (previous) this.dependencies.delete(previous);
-    if (!rel || !(adapter instanceof FileSystemAdapter)) return;
-    const abs = resolveDitavalPath(adapter.getBasePath(), rel);
-    if (!abs) {
-      this.ditavalError = 'The DITAVAL path points outside the vault.';
-      return;
-    }
-    // Watched even when it is missing, so creating it brings the filter back.
-    this.ditavalAbs = abs;
-    this.dependencies.add(abs);
-    const loaded = loadDitaval(abs);
-    this.ditavalError = loaded.error;
-    // A half-read filter would look like it works; say so instead and apply none.
-    if (loaded.error === undefined) this.ditaval = loaded.ditaval;
-  }
-
-  private profileFilter(): ProfileFilter | undefined {
-    return buildFilter(this.ditaval, this.profile.hidden);
-  }
-
-  /** A saved or switched state is in place: bring the page and the header in line with it. */
-  private applyProfileState(): void {
-    this.body.classList.toggle('hide-profiling', !this.profile.highlight);
-    this.onProfileChanged();
-    this.profilePanel?.refresh();
-  }
-
-  /**
-   * The filter changed. Content inside a topic is hidden in place, which is
-   * instant; a map's site and book views also drop whole topics, which the
-   * renderer decides, so those render again.
-   */
-  private onProfileChanged(): void {
-    this.app.workspace.requestSaveLayout();
-    this.applyProfileFilter();
-    this.find?.refresh();
-    if (this.isMapFile() && (this.mode === 'site' || this.mode === 'book')) {
-      this.previewStale = true;
-      void this.render();
-    }
-  }
-
-  /** Hide or show every profiled element of the page on screen according to the filter. */
-  private applyProfileFilter(): void {
-    const filter = this.profileFilter();
-    const verdicts = new Map<string, boolean>();
-    let hidden = 0;
-    // Document order: an element is judged after its ancestors, so one inside
-    // a hidden block is not counted as well.
-    this.body.querySelectorAll<HTMLElement>('[data-profile-keys]').forEach((el) => {
-      const keys = el.getAttribute('data-profile-keys') ?? '';
-      let out = verdicts.get(keys);
-      if (out === undefined) {
-        out = isExcluded(profileValuesOfKeys(keys), filter);
-        verdicts.set(keys, out);
-      }
-      el.classList.toggle('profile-filtered-out', out);
-      if (out && !el.parentElement?.closest('.profile-filtered-out')) hidden++;
-    });
-    this.filteredCount = hidden;
-    this.updateProfileAction();
-    this.profilePanel?.updateStatus();
-  }
-
-  /** The header button lights up while a filter is in force, and says what it is doing. */
-  private updateProfileAction(): void {
-    if (!this.profileAction) return;
-    const active = this.profileFilter() !== undefined || this.ditavalError !== undefined;
-    this.profileAction.toggleClass('is-active', active);
-    const parts = ['Conditional processing'];
-    if (this.profile.ditaval) parts.push(this.profile.ditaval.split('/').pop() ?? this.profile.ditaval);
-    if (this.ditavalError) parts.push(this.ditavalError);
-    if (this.filteredCount > 0) parts.push(`${this.filteredCount} hidden`);
-    this.profileAction.setAttribute('aria-label', parts.join(' · '));
-  }
-
-  private profileHost(): ProfilePanelHost {
-    return {
-      groups: (): ProfileGroup[] => {
-        const sets: ReturnType<typeof profileValuesOfKeys>[] = [];
-        const seen = new Set<string>();
-        this.body.querySelectorAll('[data-profile-keys]').forEach((el) => {
-          const keys = el.getAttribute('data-profile-keys') ?? '';
-          if (seen.has(keys)) return;
-          seen.add(keys);
-          sets.push(profileValuesOfKeys(keys));
-        });
-        return profileGroups(sets, this.profile.hidden);
-      },
-      hidden: () => new Set(this.profile.hidden),
-      ditaval: () => this.ditaval,
-      ditavalPath: () => this.profile.ditaval,
-      ditavalError: () => this.ditavalError,
-      highlight: () => this.profile.highlight,
-      hiddenCount: () => this.filteredCount,
-      setValueHidden: (att, value, hide) => {
-        const key = `${att}:${value}`;
-        const rest = this.profile.hidden.filter((k) => k !== key);
-        this.profile = { ...this.profile, hidden: hide ? [...rest, key] : rest };
-        this.onProfileChanged();
-      },
-      showAll: () => {
-        this.profile = { ...this.profile, hidden: [] };
-        this.onProfileChanged();
-        this.profilePanel?.refresh();
-      },
-      setHighlight: (on) => {
-        this.profile = { ...this.profile, highlight: on };
-        this.body.classList.toggle('hide-profiling', !on);
-        this.app.workspace.requestSaveLayout();
-      },
-      chooseDitaval: () => this.chooseDitaval(),
-      clearDitaval: () => this.clearDitaval(),
-    };
+    this.profiling.clear();
   }
 
   // ── rendering ──
@@ -821,8 +660,8 @@ export class DitaView extends TextFileView implements HoverParent {
     const scrollTop = this.scroller.scrollTop;
     // The file may have changed since the last render; this is what a change
     // to it (it is one of the dependencies below) triggers.
-    this.reloadDitaval();
-    const filter = this.profileFilter();
+    this.profiling.reload();
+    const filter = this.profiling.filter();
 
     let result: RenderFileResult;
     if (this.isMapFile() && this.mode === 'site') {
@@ -860,7 +699,8 @@ export class DitaView extends TextFileView implements HoverParent {
     }
     this.dependencies = result.dependencies;
     // Editing, creating or deleting the .ditaval re-renders the preview.
-    if (this.ditavalAbs) this.dependencies.add(this.ditavalAbs);
+    const ditaval = this.profiling.dependency;
+    if (ditaval) this.dependencies.add(ditaval);
 
     if (result.error !== undefined) {
       // Mid-edit text is often not valid: keep the last good preview on screen
@@ -874,8 +714,7 @@ export class DitaView extends TextFileView implements HoverParent {
     }
     this.showError(undefined);
     setRenderedHtml(this.body, result.html);
-    this.body.classList.toggle('hide-profiling', !this.profile.highlight);
-    this.applyProfileFilter();
+    this.profiling.applyFilter();
     this.find?.refresh();
     this.previewStale = false;
     this.updateScheme();
