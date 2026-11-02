@@ -10,6 +10,7 @@
 
 import { App, Keymap, Menu, TFile, normalizePath } from 'obsidian';
 import { decodeHrefPart } from '@dita-viewer/core';
+import { resolve } from 'path';
 import { isExternalHref, resolveLinkTarget } from './linkTarget';
 import { PreviewFind } from './previewFind';
 import type { SiteNav } from './siteNav';
@@ -233,7 +234,8 @@ export class PreviewInteraction {
   /**
    * Open a file named by a path relative to this document, in a new tab when
    * Ctrl/Cmd is held. `baseAbsPath` overrides the base (a book/site topic,
-   * whose links are relative to the topic file rather than to the map).
+   * whose links are relative to the topic file rather than to the map). In the
+   * site, a file that is one of its pages is shown there.
    */
   private openRelative(href: string, evt?: MouseEvent, baseAbsPath?: string): void {
     const vaultRoot = this.host.vaultRoot();
@@ -241,6 +243,16 @@ export class PreviewInteraction {
     if (!vaultRoot || !file) return;
     const link = resolveLinkTarget(vaultRoot, file.path, href, baseAbsPath);
     if (!link) return;
+    // In the site, a link to another page of the map turns the page, as a
+    // cross-topic xref does, instead of replacing the whole map with that topic.
+    // Ctrl/Cmd still opens it in a tab of its own.
+    if (this.host.mode() === 'site' && !(evt && Keymap.isModEvent(evt))) {
+      const absPath = resolve(vaultRoot, link.path);
+      if (this.host.site()?.hasPage(absPath)) {
+        this.jumpInSite(link.fragment ? `${absPath}#${link.fragment}` : absPath);
+        return;
+      }
+    }
     const target = this.host.app.vault.getAbstractFileByPath(normalizePath(link.path));
     if (target instanceof TFile) {
       void this.host.app.workspace.getLeaf(evt ? Keymap.isModEvent(evt) : false).openFile(target);

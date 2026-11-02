@@ -58,6 +58,8 @@ const stub: Record<string, unknown> = {
     /** Ctrl/Cmd on a click: the tests call the page code, not the handlers. */
     isModEvent: (): boolean => false,
   },
+  /** The vault path form of a path: forward slashes. */
+  normalizePath: (path: string): string => path.replace(/\\/g, '/'),
   Platform: { isMacOS: false, isMobile: false, isDesktop: true },
   /** SiteNav formats its landmark labels with the current locale. */
   moment: Object.assign((): string => '', { locale: (): string => 'en' }),
