@@ -28,7 +28,8 @@ starting work; update the checkboxes in the same change that finishes an item.
       and scrolls on click. The row of the current heading is highlighted (the
       caret's with the source showing, the top of the preview in reading view;
       none in a map's reading view, site view or book view, which show no
-      lines of the file). Checked in Obsidian 1.14.5: a click moves the caret
+      lines of the file); above the first heading, that heading is the one
+      marked. Checked in Obsidian 1.14.5: a click moves the caret
       or scrolls the preview, the row follows the caret and the scroll, the
       Outline's auto-scroll button keeps it in view once the list overflows,
       and the console logs no "changed shape" warning. Following the scroll in
@@ -40,6 +41,13 @@ starting work; update the checkboxes in the same change that finishes an item.
 - [x] Hover preview: Ctrl/Cmd over a link to another DITA file shows it in
       Obsidian's Page Preview popover, and `![[topic.dita]]` embeds a topic (a
       map shows its outline).
+- [x] The site view comes back to its page after a restart (`sitePage` in the
+      pane's saved state, as a path inside the vault), and a related link to
+      another page of the map turns the page as an xref does, where it used to
+      replace the whole map view with that topic; Ctrl/Cmd opens it in a tab of
+      its own. Checked in Obsidian 1.14.5 across a reload, across a map change
+      in one pane and with a page that is gone; Ctrl/Cmd+click is covered by a
+      unit test only.
 
 ## Next
 
