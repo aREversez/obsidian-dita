@@ -108,6 +108,31 @@ describe('SiteNav pages', () => {
     assert.equal(s.nav.hasPage(`${ROOT}/topics/gone.dita`), false, 'a group heading has no page');
   });
 
+  it('asks for a page before the first render, as a saved state does', () => {
+    const s = scene();
+    s.nav.restore(PAGES[2].path);
+    assert.equal(s.nav.current, PAGES[2].path);
+    assert.equal(s.nav.shown, undefined, 'nothing is on screen yet');
+
+    s.nav.applyResult(result(PAGES[2].path), 'book.ditamap');
+    assert.equal(s.nav.shown, PAGES[2].path);
+  });
+
+  it('shows the page the render settled on, which is the first when the asked-for one is gone', () => {
+    const s = scene();
+    s.nav.restore(`${ROOT}/topics/gone.dita`);
+    s.nav.applyResult(result(PAGES[0].path), 'book.ditamap');
+    assert.equal(s.nav.current, PAGES[0].path);
+    assert.equal(s.nav.shown, PAGES[0].path);
+  });
+
+  it('forgets a restored page with the rest of the map state', () => {
+    const s = scene();
+    s.nav.restore(PAGES[1].path);
+    s.nav.reset();
+    assert.equal(s.nav.current, undefined);
+  });
+
   it('opens a page: it starts at the top and asks for a render', () => {
     const s = scene();
     s.nav.applyResult(result(PAGES[0].path), 'book.ditamap');

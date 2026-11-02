@@ -74,6 +74,20 @@ export class SiteNav {
     return this.currentPath;
   }
 
+  /** The page the preview actually shows, or undefined before the first render. */
+  get shown(): string | undefined {
+    return this.shownPath;
+  }
+
+  /**
+   * Ask for a page before the first render, as a saved pane state does: the
+   * render that follows shows it, or the map's first page when the map no
+   * longer has it.
+   */
+  restore(absPath: string): void {
+    this.currentPath = absPath;
+  }
+
   /** Relative path of the map this state describes, or undefined before the first render. */
   get mapPath(): string | undefined {
     return this.mapPathValue;

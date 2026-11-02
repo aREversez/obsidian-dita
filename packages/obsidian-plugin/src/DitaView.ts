@@ -10,6 +10,7 @@ import { createCompletionEnv } from './completionEnv';
 import { ditaCompletionSource } from './completionSource';
 import { ScrollSync } from './scrollSync';
 import { SiteNav } from './siteNav';
+import { sitePageFromState, sitePageToState } from './siteState';
 import { ProfileController } from './profileController';
 import { HoverPreview } from './hoverPreview';
 import { SourceNavigation } from './sourceNavigation';
@@ -68,6 +69,8 @@ export class DitaView extends TextFileView implements HoverParent {
   private siteNav!: HTMLElement;
   /** The site view's manifest, page and buttons (siteNav.ts). */
   private site!: SiteNav;
+  /** The page a saved state asked for in a file, until that file is loaded and the site view is there to take it. */
+  private pendingSitePage?: { page: string; file: string };
 
   private dependencies = new Set<string>();
   /** Files the last diagnostics run read (reference targets, key maps). */
@@ -298,6 +301,7 @@ export class DitaView extends TextFileView implements HoverParent {
       nextFrame: (cb) => this.nextFrame(cb),
       openSource: (absPath, place, evt) => this.nav.openSource(absPath, place, evt),
     });
+    this.takeSitePage();
     this.siteNav.addEventListener('click', (evt) => this.site.onNavClick(evt as MouseEvent));
     this.siteNav.addEventListener('mouseover', (evt) => this.site.onNavHover(evt));
     this.modeAction = this.addAction(MODE_ICONS[this.mode], 'View mode', (evt) => this.showModeMenu(evt));
@@ -376,6 +380,7 @@ export class DitaView extends TextFileView implements HoverParent {
     if (this.file && this.site?.mapPath !== undefined && this.site.mapPath !== this.file.path) {
       this.site.reset();
     }
+    this.takeSitePage();
     this.scheduleRender.cancel();
     if (!this.editor) {
       // onOpen has not run yet; it seeds the editor from this.data
@@ -391,6 +396,21 @@ export class DitaView extends TextFileView implements HoverParent {
     this.nav.applyPending();
     // A load is not a keystroke: show it now rather than after the typing delay.
     if (panesFor(this.mode).preview) void this.render();
+  }
+
+  /**
+   * Hand a page a saved state asked for to the site view, once there is a site
+   * view and the file is the one the state was for. A leaf that is still
+   * opening has no file yet, or still the one it showed before, so the page
+   * waits; once the file is known it is used or dropped. A topic has no site,
+   * and a page the map no longer has is the renderer's to replace with the
+   * first one.
+   */
+  private takeSitePage(): void {
+    const pending = this.pendingSitePage;
+    if (!pending || !this.site || !this.file) return;
+    this.pendingSitePage = undefined;
+    if (this.file.path === pending.file && this.isMapFile()) this.site.restore(pending.page);
   }
 
   clear(): void {
@@ -440,12 +460,24 @@ export class DitaView extends TextFileView implements HoverParent {
     const state: Record<string, unknown> = { ...super.getState(), mode: this.mode };
     // A pane with no filter saves nothing extra.
     if (!this.profiling.isDefault) state.profiling = this.profiling.state;
+    // The page of a map's site, so a restart comes back to it, not the first page.
+    const root = this.vaultRoot();
+    const page = this.site?.current ?? this.pendingSitePage?.page;
+    const saved = root && page ? sitePageToState(root, page) : undefined;
+    if (saved) state.sitePage = saved;
     return state;
   }
 
   async setState(state: unknown, result: ViewStateResult): Promise<void> {
-    const saved = state as { mode?: unknown; profiling?: unknown } | null;
+    const saved = state as { mode?: unknown; profiling?: unknown; sitePage?: unknown; file?: unknown } | null;
     this.mode = parseViewMode(saved?.mode, this.mode);
+    const root = this.vaultRoot();
+    const page = root ? sitePageFromState(root, saved?.sitePage) : undefined;
+    if (page && typeof saved?.file === 'string') {
+      this.pendingSitePage = { page, file: saved.file };
+      // The file that is already open gets no load, and so no setViewData to take it.
+      if (this.file?.path === saved.file) this.takeSitePage();
+    }
     // Like the mode, the filter stays with the pane when the state names none.
     if (saved && 'profiling' in saved) this.profiling.restore(saved.profiling);
     if (this.container) this.applyMode();
@@ -692,7 +724,12 @@ export class DitaView extends TextFileView implements HoverParent {
         filter,
       });
       result = site;
-      if (site.error === undefined) this.site.applyResult(site, file.path);
+      if (site.error === undefined) {
+        const before = this.site.shown;
+        this.site.applyResult(site, file.path);
+        // The saved state names the page on screen; a turned page is a change to it.
+        if (this.site.shown !== before) this.app.workspace.requestSaveLayout();
+      }
     } else if (this.isMapFile() && this.mode === 'book') {
       result = renderBookFile({
         xml: this.data,
