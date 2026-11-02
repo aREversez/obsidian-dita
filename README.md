@@ -108,15 +108,14 @@ navtitle, or the file name when the map names none; key definitions, whatever
 is marked `resource-only` (with the entries under it) and the containers a
 bookmap wraps its frontmatter / backmatter in are left out). A title that
 carries `keyref` is read with the map's key values, the same way the preview
-reads it, so a product name in a bookmap title shows up there too. Click a row
-to go there: the
-preview scrolls to it in reading view, and with the source showing the caret
-moves to that line. The list follows your typing after a short pause and keeps
-the last good one while the XML is not well-formed. The row of the heading you
-are at is highlighted, and the Outline's "follow cursor" button keeps it in
-view. With the source showing (source mode, or side by side) that is the last
-heading above the caret; in reading view it is the last one above the top of
-the preview. A map's reading view, site view and book view show no lines of the
+reads it, so a product name in a bookmap title shows up there too. Click a row to go there: the preview scrolls to it in reading view, and with the
+source showing the caret moves to that line. The list follows your typing after
+a short pause and keeps the last good one while the XML is not well-formed. The
+row of the heading you are at is highlighted, and the Outline's "follow cursor"
+button keeps it in view. With the source showing (source mode, or side by side)
+that is the last heading above the caret; in reading view it is the last one
+above the top of the preview. Above the first heading, that first heading is the
+one marked. A map's reading view, site view and book view show no lines of the
 file the Outline lists, so nothing is highlighted there.
 
 Obsidian offers plugins no way to feed the Outline, so this plugin wraps three

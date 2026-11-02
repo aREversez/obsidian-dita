@@ -267,8 +267,9 @@ describe('activeHeadingIndex', () => {
     }
   });
 
-  it('is -1 above the first row', () => {
-    assert.equal(inTopic(2), -1); // the DOCTYPE
+  it('gives a line above the first row to the first row, and none to a file without rows', () => {
+    assert.equal(inTopic(0), 0); // the XML declaration
+    assert.equal(inTopic(2), 0); // the DOCTYPE
     assert.equal(activeHeadingIndex([], 0), -1);
   });
 
@@ -293,7 +294,7 @@ describe('activeHeadingIndex', () => {
     assert.equal(names(7), 'API');
     assert.equal(names(8), 'API');
     assert.equal(names(2), 'Guide'); // the key definition has no row: the nearest one above
-    assert.equal(names(0), undefined);
+    assert.equal(names(0), 'Guide'); // above the title
   });
 
   it('gives a line in a bookmap wrapper the nearest row above', () => {

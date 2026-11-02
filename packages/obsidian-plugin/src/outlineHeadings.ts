@@ -205,9 +205,12 @@ function flatten(
 
 /**
  * Index of the row that owns `line` (zero-based): the last row in document
- * order that starts on or before it, or -1 when the line is above the first
- * row. This is how a line of a Markdown note belongs to the heading above it,
- * and it keeps the answer moving only forward as the line does. Picking the
+ * order that starts on or before it. This is how a line of a Markdown note
+ * belongs to the heading above it, and it keeps the answer moving only forward
+ * as the line does. A line above the first row (the XML declaration, the
+ * DOCTYPE, a preview scrolled to the very top) belongs to the first row: a
+ * DITA file's first content is its title, so there is no text before the first
+ * heading, as a Markdown note can have. -1 only when there are no rows. Picking the
  * innermost row whose element spans the line instead hands the line back to
  * the parent in every gap between two sections, so the marked row would jump
  * between the topic and its sections while scrolling or typing.
@@ -217,7 +220,7 @@ export function activeHeadingIndex(headings: ReadonlyArray<Pick<OutlineHeading, 
   for (let i = 0; i < headings.length; i++) {
     if (headings[i].position.start.line <= line) at = i;
   }
-  return at;
+  return at < 0 && headings.length > 0 ? 0 : at;
 }
 
 /** The map's own title element (`<booktitle>` of a bookmap, else `<title>`), for its row. */

@@ -222,14 +222,26 @@ describe('Outline patch: the current heading', () => {
     assert.equal(view.findActiveHeading({ getMode: () => 'source' }), plan);
   });
 
-  it('is null when no line stands for the view, or the line is above every heading', () => {
+  it('is null when no line stands for the view, or the Outline has no rows', () => {
     const view = new (makeOutlineClass())();
     installOutlinePatch(fakeApp([{ isDeferred: false, view }]).app, source);
     view.file = { path: 'a.dita' };
-    view.tree = treeOf([{ heading: heading('Topic', 3, 20) }]);
+    const topic = treeOf([{ heading: heading('Topic', 3, 20) }]);
+    view.tree = topic;
     assert.equal(view.findActiveHeading(null), null);
     currentLine = 1;
+    view.tree = treeOf([]);
     assert.equal(view.findActiveHeading(null), null);
+  });
+
+  it('gives a line above the first heading to the first row', () => {
+    const view = new (makeOutlineClass())();
+    installOutlinePatch(fakeApp([{ isDeferred: false, view }]).app, source);
+    view.file = { path: 'a.dita' };
+    const tree = treeOf([{ heading: heading('Topic', 3, 20) }]);
+    view.tree = tree;
+    currentLine = 1;
+    assert.equal(view.findActiveHeading(null), tree.root.vChildren.children[0]);
   });
 
   it('leaves other files to Obsidian', () => {
