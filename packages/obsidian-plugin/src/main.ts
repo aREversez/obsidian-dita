@@ -29,6 +29,10 @@ export default class DitaViewerPlugin extends Plugin implements SettingsProvider
       isDita: (file) => isDitaPath(file.path),
       headings: (file) => this.outlineHeadings(file),
       leafFor: (outline, file) => this.leafShowing(file, (outline.leaf as { group?: string | null }).group),
+      activeLine: (outline, file) => {
+        const view = this.leafShowing(file, (outline.leaf as { group?: string | null }).group)?.view;
+        return view instanceof DitaView ? view.outlineLine() : undefined;
+      },
     }));
 
     for (const mode of VIEW_MODES) {

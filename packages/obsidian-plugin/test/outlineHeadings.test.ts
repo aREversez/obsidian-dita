@@ -1,5 +1,5 @@
 import { strict as assert } from 'assert';
-import { HeadingTracker, ditaHeadings } from '../src/outlineHeadings';
+import { HeadingTracker, activeHeadingIndex, ditaHeadings } from '../src/outlineHeadings';
 
 const topic = [
   '<?xml version="1.0" encoding="UTF-8"?>',
@@ -236,5 +236,84 @@ describe('HeadingTracker', () => {
     for (let i = 0; i < 80; i++) tracker.headingsFor(`f${i}.dita`, `<topic id="t${i}"><title>T${i}</title></topic>`, false);
     assert.deepEqual(tracker.lastKnown('f0.dita'), []);
     assert.equal(tracker.lastKnown('f79.dita')[0]?.heading, 'T79');
+  });
+});
+
+describe('activeHeadingIndex', () => {
+  // Rows of `topic`: Deploy guide 3-19, Plan 6-9, Sample 12-12, Inner topic 15-18, Deep 17-17.
+  const inTopic = (line: number) => activeHeadingIndex(ditaHeadings(topic, false) ?? [], line);
+
+  it('is the last row starting on or before the line', () => {
+    assert.equal(inTopic(3), 0);
+    assert.equal(inTopic(8), 1); // in Plan
+    assert.equal(inTopic(12), 2); // Sample
+    assert.equal(inTopic(16), 3); // Inner topic's own title
+    assert.equal(inTopic(17), 4); // Deep
+  });
+
+  it('stays on a row until the next one starts, whatever ends in between', () => {
+    assert.equal(inTopic(11), 1); // the untitled section has no row: still Plan's
+    assert.equal(inTopic(14), 2); // </conbody>, after Sample
+    assert.equal(inTopic(18), 4); // Inner topic's closing tag, after Deep
+  });
+
+  it('only ever moves forward as the line does', () => {
+    const rows = ditaHeadings(topic, false) ?? [];
+    let previous = -1;
+    for (let line = 0; line <= 20; line++) {
+      const at = activeHeadingIndex(rows, line);
+      assert.ok(at >= previous, `line ${line} went back from row ${previous} to ${at}`);
+      previous = at;
+    }
+  });
+
+  it('gives a line above the first row to the first row, and none to a file without rows', () => {
+    assert.equal(inTopic(0), 0); // the XML declaration
+    assert.equal(inTopic(2), 0); // the DOCTYPE
+    assert.equal(activeHeadingIndex([], 0), -1);
+  });
+
+  it('follows the topicref hierarchy of a map', () => {
+    const map = [
+      '<map>',
+      '  <title>Guide</title>',
+      '  <keydef keys="product" href="keys.dita"/>',
+      '  <topicref href="intro.dita" navtitle="Introduction">',
+      '    <topicref href="deep.dita"/>',
+      '  </topicref>',
+      '  <topichead navtitle="Reference">',
+      '    <topicref href="api.dita" navtitle="API"/>',
+      '  </topichead>',
+      '</map>',
+    ].join('\n');
+    const rows = ditaHeadings(map, true) ?? [];
+    const names = (line: number) => rows[activeHeadingIndex(rows, line)]?.heading;
+    assert.equal(names(3), 'Introduction');
+    assert.equal(names(4), 'deep.dita');
+    assert.equal(names(5), 'deep.dita'); // </topicref>: nothing started since
+    assert.equal(names(7), 'API');
+    assert.equal(names(8), 'API');
+    assert.equal(names(2), 'Guide'); // the key definition has no row: the nearest one above
+    assert.equal(names(0), 'Guide'); // above the title
+  });
+
+  it('gives a line in a bookmap wrapper the nearest row above', () => {
+    const bookmap = [
+      '<bookmap>',
+      '  <booktitle><mainbooktitle>Manual</mainbooktitle></booktitle>',
+      '  <frontmatter>',
+      '    <mapref href="keys.ditamap" processing-role="resource-only"/>',
+      '    <preface href="p.dita" navtitle="Preface"/>',
+      '  </frontmatter>',
+      '  <chapter href="c.dita" navtitle="Chapter"/>',
+      '</bookmap>',
+    ].join('\n');
+    const rows = ditaHeadings(bookmap, true) ?? [];
+    const names = (line: number) => rows[activeHeadingIndex(rows, line)]?.heading;
+    assert.equal(names(2), 'Manual'); // <frontmatter>
+    assert.equal(names(3), 'Manual'); // the resource-only reference is not a row
+    assert.equal(names(4), 'Preface');
+    assert.equal(names(5), 'Preface');
+    assert.equal(names(6), 'Chapter');
   });
 });

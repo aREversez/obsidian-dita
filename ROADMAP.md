@@ -20,10 +20,34 @@ starting work; update the checkboxes in the same change that finishes an item.
       preview, outline, site and book views (Phase 3 below).
 - [x] Obsidian's Outline pane lists the headings of an open `.dita` / `.ditamap`
       and scrolls to them on click. Obsidian has no hook for this, so the
-      plugin wraps `getHeadings` and `findCorrespondingLeaf` on the Outline
-      view's prototype (`outlinePatch.ts`), guarded so that a changed Outline
-      leaves it alone. Unit-tested against a stand-in view and checked against
-      the 1.14.5 bundle's source; not yet tried in a running Obsidian.
+      plugin wraps `getHeadings`, `findCorrespondingLeaf` and
+      `findActiveHeading` on the Outline view's prototype (`outlinePatch.ts`),
+      guarded so that a changed Outline leaves it alone. Unit-tested against a
+      stand-in view and checked against the source of the 1.5.12, 1.8.10,
+      1.11.7 and 1.14.5 bundles. In a running Obsidian it lists the headings
+      and scrolls on click. The row of the current heading is highlighted (the
+      caret's with the source showing, the top of the preview in reading view;
+      none in a map's reading view, site view or book view, which show no
+      lines of the file); above the first heading, that heading is the one
+      marked. Checked in Obsidian 1.14.5: a click moves the caret
+      or scrolls the preview, the row follows the caret and the scroll, the
+      Outline's auto-scroll button keeps it in view once the list overflows,
+      and the console logs no "changed shape" warning. Following the scroll in
+      reading view stays, since it is the only line a long topic offers there
+      and it costs nothing while no Outline pane is open (only the Outline
+      asks for that line); a map's reading view, the site and the book stay
+      unmarked on purpose.
+- [x] Find in the preview (Ctrl/Cmd+F), in reading, split, site and book view.
+- [x] Hover preview: Ctrl/Cmd over a link to another DITA file shows it in
+      Obsidian's Page Preview popover, and `![[topic.dita]]` embeds a topic (a
+      map shows its outline).
+- [x] The site view comes back to its page after a restart (`sitePage` in the
+      pane's saved state, as a path inside the vault), and a related link to
+      another page of the map turns the page as an xref does, where it used to
+      replace the whole map view with that topic; Ctrl/Cmd opens it in a tab of
+      its own. Checked in Obsidian 1.14.5 across a reload, across a map change
+      in one pane and with a page that is gone; Ctrl/Cmd+click is covered by a
+      unit test only.
 
 ## Next
 
@@ -87,14 +111,35 @@ values is unticked; this one follows DITA-OT (every value of one attribute).
 - [x] Version and `manifest.json` hygiene (one manifest at the repo root,
       `versions.json`, `npm run release:check`), release workflow that attaches
       `main.js`, `manifest.json`, `styles.css` (`.github/workflows/release.yml`).
-      The workflow has not run yet: it needs a first tag pushed to GitHub.
+      Tags `0.1.0` to `0.2.2` are pushed. The workflow also attests build
+      provenance for the three files (`gh attestation verify`).
 - [x] BRAT install and the desktop-only note are in the README.
-- [ ] Trial through BRAT with a first tag (`0.1.0`), then consider the community
-      plugin directory (needs screenshots; its review also reads the README).
+- [x] README screenshot, and the community plugin directory's review findings.
+      The settings tab also defines its settings declaratively
+      (`getSettingDefinitions`, for Obsidian 1.13's settings search) next to
+      `display()`, which still draws it before 1.13, so `minAppVersion` stays
+      1.5.0. `setDynamicTooltip()` stays in that older path, where it is what
+      shows the slider value.
+- [x] Trial through BRAT from a release tag. BRAT 2.2.0 in Obsidian 1.14.5
+      installed 0.2.2, frozen to that tag, with no prompt and no error; the
+      `main.js` and `styles.css` it left are byte-identical to the release's
+      assets (the manifest it rewrites is the same file minified), and the
+      plugin rendered a topic afterwards.
+- [x] Community plugin directory: get the submission through review. It is
+      listed and installable from the app's own browser at 0.2.2, already
+      downloaded by users. The automated review reports no failures: both
+      assets carry a verified release attestation, the build reproduces
+      `main.js` byte for byte, no vulnerable dependencies, no obfuscation and
+      no suspicious network patterns. What it notes is `setDynamicTooltip` as
+      deprecated (it stays for the reason given above), that the plugin
+      enumerates the vault and uses the clipboard (both through the Obsidian
+      API), and that the malware scan was not available. The entry carries the
+      directory's "not manually reviewed by Obsidian staff" line, which most
+      of the directory does since the automated review took over.
 
 ### In parallel, later
 
-- [ ] Make the VS Code DITA Viewer depend on `@dita-viewer/core` instead of its
+- [x] Make the VS Code DITA Viewer depend on `@dita-viewer/core` instead of its
       own copies. Decided: publish the core to npm and depend on it by version.
       The core's source moved into the viewer's repository (`packages/core`,
       with its own README), so it is edited and released there.
@@ -123,7 +168,7 @@ values is unticked; this one follows DITA-OT (every value of one attribute).
         of them.
   - [x] Publish 0.2.0, which exports the remaining 61 (`src/index.ts`, pinned
         by `test/publicApi.test.ts`).
-  - [x] In the extension: depend on the package (pinned to 0.2.0), replace its
+  - [x] In the extension: depend on the package (pinned; 0.2.2 now), replace its
         imports of the copied modules, delete the copies, and adjust its
         build and tests.
 

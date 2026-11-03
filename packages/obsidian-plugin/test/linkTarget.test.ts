@@ -1,6 +1,6 @@
 import { strict as assert } from 'assert';
 import { join } from 'path';
-import { isExternalHref, resolveLinkTarget } from '../src/linkTarget';
+import { fragmentOf, isExternalHref, keyNameOf, pathOf, resolveLinkTarget } from '../src/linkTarget';
 
 const root = join('/', 'vault');
 
@@ -41,5 +41,45 @@ describe('isExternalHref', () => {
     assert.ok(isExternalHref('mailto:a@b.c'));
     assert.ok(!isExternalHref('topics/a.dita'));
     assert.ok(!isExternalHref('#id'));
+  });
+
+  it('leaves a relative path alone', () => {
+    assert.ok(!isExternalHref('httpsomething.dita'));
+    assert.ok(!isExternalHref('mailto-not.dita'));
+  });
+});
+
+describe('keyNameOf', () => {
+  it('names the key before the first slash', () => {
+    assert.equal(keyNameOf('product-name'), 'product-name');
+    assert.equal(keyNameOf('product-name/element-id'), 'product-name');
+    assert.equal(keyNameOf('  spaced  '), 'spaced');
+    assert.equal(keyNameOf(''), '');
+  });
+});
+
+describe('pathOf', () => {
+  it('takes the path, decoded and without query or fragment', () => {
+    assert.equal(pathOf('a.dita'), 'a.dita');
+    assert.equal(pathOf('a.dita#t/e'), 'a.dita');
+    assert.equal(pathOf('a.dita#id'), 'a.dita');
+    assert.equal(pathOf('my%20topic.dita'), 'my topic.dita');
+    assert.equal(pathOf('a.dita?rev=2#id'), 'a.dita');
+  });
+
+  it('is empty for a fragment on the same page', () => {
+    assert.equal(pathOf('#id'), '');
+    // a web link has nothing to resolve in the vault; the caller checks isExternalHref first
+    assert.equal(pathOf('https://example.com/a.dita'), 'https://example.com/a.dita');
+  });
+});
+
+describe('fragmentOf', () => {
+  it('takes what follows the hash, decoded', () => {
+    assert.equal(fragmentOf('a.dita#t/e'), 't/e');
+    assert.equal(fragmentOf('#id'), 'id');
+    assert.equal(fragmentOf('a.dita#step%201'), 'step 1');
+    assert.equal(fragmentOf('a.dita'), '');
+    assert.equal(fragmentOf('a.dita#'), '');
   });
 });

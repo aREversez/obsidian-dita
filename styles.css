@@ -16,9 +16,15 @@
    as a duplicate scrollbar; the pane's bottom padding then scrolls as empty
    space over the end of the text. DitaView marks its pane `dita-pane` so this
    rule outranks the stock one whatever order the sheets load in, and the pane
-   takes the height the header leaves rather than trusting the stock sum. */
+   takes the height the header leaves rather than trusting the stock sum.
+   The pane's flex basis is 0, not auto: the leaf is a flex column whose header
+   is allowed to shrink, and a basis taken from the content (a long topic is
+   thousands of pixels tall) makes the pane's share of any shortfall so large
+   that the header gives up most of its height to it, so the header was a
+   different height for every topic. With a basis of 0 the pane asks for
+   nothing and just fills what the header leaves. */
 .workspace-leaf-content .view-content.dita-pane {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   height: auto;
   min-height: 0;
   padding: 0;

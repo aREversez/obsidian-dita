@@ -28,8 +28,8 @@ conref "jump to source" in the preview, wrap and insert commands, the
 a `.ditaval` or hand-picked values (below), and a quick switcher for `.dita` /
 `.ditamap` files.
 
-Not yet: Git compare, DITA-OT. Mobile is not supported because the core reads
-files through Node.
+Out of scope for now: Git compare and DITA-OT publishing (see the roadmap).
+Mobile is not supported because the core reads files through Node.
 
 ## View modes
 
@@ -42,7 +42,7 @@ menu, or a command:
 | **Reading view** | The formatted topic, or the map outline. |
 | **Source mode** | The XML in an editor: syntax highlighting, line numbers, auto-closing tags and quotes, search, undo history. |
 | **Live preview (side by side)** | Source on the left, preview on the right. The preview updates shortly after you stop typing and keeps the last good render while the XML is invalid (an error bar says what is wrong). Scrolling or moving the caret in the source scrolls the preview to the same place; clicking an element in the preview puts the caret on its source. |
-| **Site view** (maps only) | One topic per page with a sidebar of the whole map. The sidebar shows nested topicheads and bookmap division labels; click a row, or use the previous/next buttons in the pane header, to change page. A cross-topic `xref` to another topic in the map switches to that page and scrolls to the target. Right-click the page to reveal its topic's source at the clicked line. |
+| **Site view** (maps only) | One topic per page with a sidebar of the whole map. The sidebar shows nested topicheads and bookmap division labels; click a row, or use the previous/next buttons in the pane header, to change page. A cross-topic `xref` or related link to another topic in the map switches to that page and scrolls to the target (Ctrl/Cmd opens it in a tab of its own instead). The page you are on is saved with the pane, so a restart comes back to it. Right-click the page to reveal its topic's source at the clicked line. |
 | **Book view** (maps only) | Every topic the map references, in map order, merged into one reading page with its bookmap chapter/appendix labels. A cross-topic `xref` to another topic in the same book scrolls to that section instead of opening a file. Right-click a section to reveal that topic's source at the clicked line. |
 
 Commands (all under "DITA Viewer:"): *Reading view*, *Source mode*, *Live
@@ -108,18 +108,22 @@ navtitle, or the file name when the map names none; key definitions, whatever
 is marked `resource-only` (with the entries under it) and the containers a
 bookmap wraps its frontmatter / backmatter in are left out). A title that
 carries `keyref` is read with the map's key values, the same way the preview
-reads it, so a product name in a bookmap title shows up there too. Click a row
-to go there: the
-preview scrolls to it in reading view, and with the source showing the caret
-moves to that line. The list follows your typing after a short pause and keeps
-the last good one while the XML is not well-formed. The row for the heading
-under the caret is not highlighted, and "follow cursor" does nothing for DITA
-files.
+reads it, so a product name in a bookmap title shows up there too. Click a row to go there: the preview scrolls to it in reading view, and with the
+source showing the caret moves to that line. The list follows your typing after
+a short pause and keeps the last good one while the XML is not well-formed. The
+row of the heading you are at is highlighted, and the Outline's "follow cursor"
+button keeps it in view. With the source showing (source mode, or side by side)
+that is the last heading above the caret; in reading view it is the last one
+above the top of the preview. Above the first heading, that first heading is the
+one marked. A map's reading view, site view and book view show no lines of the
+file the Outline lists, so nothing is highlighted there.
 
-Obsidian offers plugins no way to feed the Outline, so this plugin wraps two
-methods of the Outline view. If a future Obsidian changes them, the plugin
-leaves the Outline alone and DITA files show "No headings found" there, as
-before; nothing else is affected.
+Obsidian offers plugins no way to feed the Outline, so this plugin wraps three
+methods of the Outline view. If a future Obsidian changes the first two
+(`getHeadings`, `findCorrespondingLeaf`), the plugin leaves the Outline alone
+and DITA files show "No headings found" there, as before; if it changes the
+third (`findActiveHeading`), the list still works and no row is highlighted.
+Nothing else is affected.
 
 ## Find in the preview
 
@@ -267,8 +271,19 @@ packages/obsidian-plugin  the Obsidian plugin: view, theme adapter, build
 The rendering core, `@dita-viewer/core`, is installed from npm and pinned in
 `packages/obsidian-plugin/package.json`. Its source is in the VS Code DITA
 Viewer repository (`packages/core`), where it is edited and released with a
-`core-<version>` tag. To take a change, raise the pinned version and run
-`npm install` and `npm run verify`.
+`core-<version>` tag. The version is exact, not a range, and the core is
+bundled into `main.js`, so a release carries the core it was built with. To
+take a change, let npm raise the pin (it also rewrites `package-lock.json`,
+integrity included), then rebuild:
+
+```
+npm install @dita-viewer/core@<version> -w obsidian-dita --save-exact
+npm run release:prepare   # rebuilds and syncs the root main.js
+npm run verify
+```
+
+Without `--save-exact` npm writes `^<version>`, which would let a later install
+pick up a newer core than the one that was tested.
 
 ## Development
 
@@ -320,9 +335,11 @@ checks that the tag equals the manifest version (bare `0.3.0`, no `v`), rebuilds
 and syncs the root copies in the runner's own working tree, and publishes a
 GitHub release with `main.js`, `manifest.json` and `styles.css` attached at the
 flat root paths the installer downloads, so the attached bundle is the one that
-runner built. The workflow writes nothing to git. Raise `minAppVersion` in
-`manifest.json` before the bump if a release starts to need a newer Obsidian;
-`versions.json` records it per version.
+runner built; it also attests the build provenance of those files, so a download
+can be checked with `gh attestation verify main.js --repo
+aREversez/obsidian-dita`. The workflow writes nothing to git. Raise
+`minAppVersion` in `manifest.json` before the bump if a release starts to need a
+newer Obsidian; `versions.json` records it per version.
 
 ## Sample document
 

@@ -34,3 +34,21 @@ export function resolveLinkTarget(vaultRoot: string, fromPath: string, href: str
 export function isExternalHref(href: string): boolean {
   return /^(https?:|mailto:)/i.test(href);
 }
+
+/** The key a keyref/conkeyref names: everything before the first '/'. */
+export function keyNameOf(value: string): string {
+  const slash = value.indexOf('/');
+  return (slash < 0 ? value : value.slice(0, slash)).trim();
+}
+
+/** The path part of an href, percent-decoded and without a query or fragment. */
+export function pathOf(href: string): string {
+  const hash = href.indexOf('#');
+  return decodeHrefPart((hash < 0 ? href : href.slice(0, hash)).split('?')[0]);
+}
+
+/** The decoded #fragment of an href, or ''. */
+export function fragmentOf(href: string): string {
+  const hash = href.indexOf('#');
+  return hash < 0 ? '' : decodeHrefPart(href.slice(hash + 1));
+}
