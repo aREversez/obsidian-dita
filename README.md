@@ -271,8 +271,19 @@ packages/obsidian-plugin  the Obsidian plugin: view, theme adapter, build
 The rendering core, `@dita-viewer/core`, is installed from npm and pinned in
 `packages/obsidian-plugin/package.json`. Its source is in the VS Code DITA
 Viewer repository (`packages/core`), where it is edited and released with a
-`core-<version>` tag. To take a change, raise the pinned version and run
-`npm install` and `npm run verify`.
+`core-<version>` tag. The version is exact, not a range, and the core is
+bundled into `main.js`, so a release carries the core it was built with. To
+take a change, let npm raise the pin (it also rewrites `package-lock.json`,
+integrity included), then rebuild:
+
+```
+npm install @dita-viewer/core@<version> -w obsidian-dita --save-exact
+npm run release:prepare   # rebuilds and syncs the root main.js
+npm run verify
+```
+
+Without `--save-exact` npm writes `^<version>`, which would let a later install
+pick up a newer core than the one that was tested.
 
 ## Development
 
