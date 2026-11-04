@@ -28,8 +28,29 @@
 :host {
   /* Neutralise inherited text styling from the surrounding view (a theme that
      centres, letter-spaces or upper-cases .view-content must not leak in).
-     `all` does not touch custom properties, so the tokens still flow. */
-  all: initial;
+     Only inherited properties can leak through the shadow boundary, so those
+     are reset one by one; the `all` shorthand does the same but is flagged by
+     Obsidian's CSS lint. Custom properties are not touched, so tokens flow. */
+  font-style: normal;
+  font-weight: normal;
+  font-variant: normal;
+  font-stretch: normal;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-align: start;
+  text-indent: 0;
+  text-transform: none;
+  text-shadow: none;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: manual;
+  tab-size: 8;
+  direction: ltr;
+  cursor: auto;
+  visibility: visible;
+  list-style: disc outside none;
+  quotes: auto;
   display: block;
   box-sizing: border-box;
 
