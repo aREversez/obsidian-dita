@@ -48,6 +48,17 @@ describe('anchorPopover', () => {
     assert.doesNotThrow(() => anchorPopover(popover as unknown as HoverPopover, AT));
     assert.equal(popover.staticPos, null);
   });
+
+  it('keeps the point and does not throw when positioning fails', () => {
+    const popover: StandIn = {
+      staticPos: null,
+      position: () => {
+        throw new Error('hoverEl is not built yet');
+      },
+    };
+    assert.doesNotThrow(() => anchorPopover(popover as unknown as HoverPopover, AT));
+    assert.equal(popover.staticPos, AT);
+  });
 });
 
 describe('HoverPreview hoverPopover', () => {
@@ -69,6 +80,17 @@ describe('HoverPreview hoverPopover', () => {
     (preview as unknown as { pointer: Point }).pointer = AT;
     const { popover, calls } = standIn();
     popover.targetEl = {} as Element;
+    preview.hoverPopover = popover as unknown as HoverPopover;
+    assert.equal(popover.staticPos, null);
+    assert.equal(calls(), 0);
+  });
+
+  it('forgets the point once the pointer has left the preview', () => {
+    const preview = make();
+    (preview as unknown as { pointer: Point }).pointer = AT;
+    preview.left();
+    const { popover, calls } = standIn();
+    popover.targetEl = host;
     preview.hoverPopover = popover as unknown as HoverPopover;
     assert.equal(popover.staticPos, null);
     assert.equal(calls(), 0);

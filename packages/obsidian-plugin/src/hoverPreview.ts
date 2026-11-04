@@ -39,7 +39,13 @@ export function anchorPopover(popover: HoverPopover, point: Point): void {
   const internal = popover as unknown as { staticPos?: Point | null; position?: () => void };
   if (internal.staticPos || typeof internal.position !== 'function') return;
   internal.staticPos = point;
-  internal.position();
+  // Obsidian hands the popover over while it is still being built, so its
+  // element may not be there yet; the point stays, and its next pass uses it.
+  try {
+    internal.position();
+  } catch {
+    // placement is Obsidian's: a failure here must not break the hover
+  }
 }
 
 export interface HoverPreviewHost {
@@ -79,10 +85,12 @@ export class HoverPreview {
 
   /**
    * The pointer left the preview altogether (Page Preview closes the popover
-   * itself): the next link is a new one.
+   * itself): the next link is a new one, and the point of the last one is no
+   * longer where a popover belongs.
    */
   left(): void {
     this.link = undefined;
+    this.pointer = undefined;
   }
 
   /**
